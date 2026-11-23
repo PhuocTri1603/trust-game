@@ -47,17 +47,24 @@ function Garden({ moodA, moodB }: { moodA?: 'happy' | 'sad' | 'thinking' | 'smug
 }
 
 type SavedMatch = { id:string; date:string; opponent:string; result:'Thắng'|'Thua'|'Hòa'; myProfit:number; theirProfit:number; h:number };
-type PlayerProfile = { name:string; xp:number; matches:SavedMatch[]; quests:{day:string; played:number; wins:number; rematches:number} };
+type GardenTheme='classic'|'sunset'|'night';
+const gardenThemes:{id:GardenTheme;name:string;emoji:string;requiredXP:number}[]=[
+  {id:'classic',name:'Vườn xanh',emoji:'🌿',requiredXP:0},
+  {id:'sunset',name:'Hoàng hôn',emoji:'🌅',requiredXP:100},
+  {id:'night',name:'Đêm sao',emoji:'🌙',requiredXP:300}
+];
+type PlayerProfile = { name:string; xp:number; theme?:GardenTheme; matches:SavedMatch[]; quests:{day:string; played:number; wins:number; rematches:number} };
 const STORAGE_KEY='trust-garden-player-v1';
 const todayKey=()=>new Date().toLocaleDateString('en-CA');
-const initialProfile=():PlayerProfile=>({name:'Milo',xp:0,matches:[],quests:{day:todayKey(),played:0,wins:0,rematches:0}});
+const initialProfile=():PlayerProfile=>({name:'Milo',xp:0,theme:'classic',matches:[],quests:{day:todayKey(),played:0,wins:0,rematches:0}});
 const loadProfile=():PlayerProfile=>{
   try {
     const raw=localStorage.getItem(STORAGE_KEY);
     if(!raw)return initialProfile();
     const value=JSON.parse(raw);
     if(typeof value.name!=='string'||typeof value.xp!=='number'||!Array.isArray(value.matches)||!value.quests)return initialProfile();
-    return {...value,name:value.name.slice(0,20),matches:value.matches.slice(0,10)};
+    const theme=gardenThemes.some(t=>t.id===value.theme&&value.xp>=t.requiredXP)?value.theme:'classic';
+    return {...value,theme,name:value.name.slice(0,20),matches:value.matches.slice(0,10)};
   }catch{return initialProfile();}
 };
 function App() {
@@ -67,6 +74,7 @@ function App() {
   const day=todayKey();
   const quests=profile.quests.day===day?profile.quests:{day,played:0,wins:0,rematches:0};
   const level=Math.floor(profile.xp/100)+1;
+  const activeTheme=gardenThemes.find(t=>t.id===profile.theme&&profile.xp>=t.requiredXP)?.id??'classic';
   const updateProfile=(fn:(current:PlayerProfile)=>PlayerProfile)=>setProfile(current=>{
     const next=fn(current);
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next));}catch{/* storage disabled */}
@@ -218,7 +226,7 @@ function App() {
     else setRound(round + 1);
   };
 
-  return <main className="app-shell">
+  return <main className={`app-shell theme-${activeTheme}`}>
     <header className="topbar"><span className="brand">⚙ THE TRUST GARDEN · AI COMPETITION</span><span className="edition">AN AXELROD–COURNOT EXPERIMENT</span></header>
     {screen === 'intro' && <section className="story-screen">
       <div className="choice-card" style={{maxWidth:650,margin:'0 auto 18px'}}>
@@ -231,6 +239,9 @@ function App() {
         <p>{quests.wins>=1?'✅':'⬜'} Thắng 1 trận · +15 XP</p>
         <p>{quests.rematches>=1?'✅':'⬜'} Chơi Rematch · +15 XP</p>
         <p>Mỗi trận hoàn thành: +20 XP. Nhiệm vụ làm mới theo ngày trên thiết bị.</p>
+        <h2>🎨 TRANG TRÍ KHU VƯỜN</h2>
+        <p>Mở khóa bằng XP, miễn phí và chỉ thay đổi giao diện — không ảnh hưởng điểm số.</p>
+        <div className="theme-picker">{gardenThemes.map(theme=><button key={theme.id} className={activeTheme===theme.id?'theme-option selected':'theme-option'} disabled={profile.xp<theme.requiredXP} aria-pressed={activeTheme===theme.id} onClick={()=>updateProfile(p=>({...p,theme:theme.id}))}>{theme.emoji} {theme.name} {profile.xp<theme.requiredXP?`🔒 ${theme.requiredXP} XP`:activeTheme===theme.id?'✓ Đang dùng':'Chọn'}</button>)}</div>
         <h2>📜 10 TRẬN GẦN NHẤT</h2>
         {profile.matches.length===0?<p>Chưa có trận nào được lưu.</p>:<div className="history-list">{profile.matches.map(m=><div className="history-row" key={m.id}><span>{m.result}</span><span>{m.opponent} · H={m.h}</span><strong>{m.myProfit}/{m.theirProfit}</strong></div>)}</div>}
         <p className="disclaimer">Dữ liệu chỉ lưu trên trình duyệt này; xóa dữ liệu trình duyệt sẽ mất tiến độ. PvP chưa cộng XP.</p>
