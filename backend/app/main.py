@@ -16,6 +16,7 @@ ALPHABET = string.ascii_uppercase + string.digits
 class Room:
     code: str
     h: int = 3
+    public_queue: bool = False
     tokens: dict = field(default_factory=dict)
     clients: dict = field(default_factory=dict)
     choices: dict = field(default_factory=dict)
@@ -76,7 +77,7 @@ async def matchmaking_join(request: CreateRequest = CreateRequest()):
         raise HTTPException(422, str(exc)) from exc
     async with matchmaking_lock:
         for room in rooms.values():
-            if room.h == request.h and len(room.tokens) == 1 and not room.history:
+            if room.public_queue and room.h == request.h and len(room.tokens) == 1 and not room.history:
                 token = secrets.token_urlsafe(32)
                 room.tokens["B"] = token
                 return {"code": room.code, "seat": "B", "token": token, "h": room.h}
@@ -84,7 +85,7 @@ async def matchmaking_join(request: CreateRequest = CreateRequest()):
         while code in rooms:
             code = "".join(secrets.choice(ALPHABET) for _ in range(6))
         token = secrets.token_urlsafe(32)
-        rooms[code] = Room(code=code, h=request.h, tokens={"A": token})
+        rooms[code] = Room(code=code, h=request.h, public_queue=True, tokens={"A": token})
         return {"code": code, "seat": "A", "token": token, "h": request.h}
 
 @app.post("/rooms/join")
