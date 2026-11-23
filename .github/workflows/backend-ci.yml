@@ -14,5 +14,5 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
         working-directory: backend
-      - run: pytest -q
+      - run: python -m pytest -q
         working-directory: backend
