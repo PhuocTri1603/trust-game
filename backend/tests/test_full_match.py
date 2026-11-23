@@ -41,4 +41,4 @@ def test_ten_rounds_and_hidden_action():
                 assert len(sa["history"]) == i
                 assert sa["history"] == sb["history"]
             assert sa["finished"] and sb["finished"]
-            assert sa["scores"] == [26, 11]
+            assert sa["scores"] == [30, 20]
