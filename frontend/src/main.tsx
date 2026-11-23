@@ -92,11 +92,15 @@ function App() {
   const [session, setSession] = useState<{code:string;token:string;seat:'A'|'B'} | null>(null);
   const [connection, setConnection] = useState('Not connected');
   const [players, setPlayers] = useState(1);
+  const [connectedPlayers,setConnectedPlayers]=useState(0);
+  const [rematchVotes,setRematchVotes]=useState(0);
+  const [votedRematch,setVotedRematch]=useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [onlineHistory, setOnlineHistory] = useState<Turn[]>([]);
   const socket = useRef<WebSocket | null>(null);
   const api = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
   const connect = (data:{code:string;token:string;seat:'A'|'B'}) => {
+    setVotedRematch(false);
     socket.current?.close();
     setMode('online');
     setSession(data);
@@ -105,27 +109,39 @@ function App() {
     const ws = new WebSocket(api.replace(/^http/, 'ws') + '/ws/' + data.code + '?token=' + encodeURIComponent(data.token));
     socket.current = ws;
     ws.onopen = () => setConnection('Connected');
-    ws.onclose = () => setConnection('Disconnected — reconnect to resume');
+    ws.onclose = () => {if(socket.current===ws)setConnection('Mất kết nối — nhấn Kết nối lại');};
     ws.onerror = () => setConnection('Connection error');
     ws.onmessage = (event:MessageEvent) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'room.state') {
         setH(msg.h);
         setPlayers(msg.players);
+        setConnectedPlayers(msg.connected ?? msg.players);
+        setRematchVotes(msg.rematch_votes ?? 0);
         setRound(Math.min(msg.round, MAX_ROUNDS));
         setSubmitted(msg.submitted);
         setOnlineHistory(msg.history.map((t:{round:number;a:Choice;b:Choice;points:number[]}) => ({round:t.round,a:t.a,b:t.b,pa:t.points[0],pb:t.points[1]})));
         if (msg.finished) setScreen('final');
-        else if (msg.players === 2) setScreen('game');
+        else if (msg.players === 2) {setVotedRematch(false);setScreen('game');}
+        else setScreen('lobby');
       }
       if (msg.type === 'error') setConnection(msg.message);
     };
   };
   useEffect(() => {
+    const code=new URLSearchParams(window.location.search).get('room');
+    if(code && /^[A-Z0-9]{6}$/i.test(code)) {setInvite(code.toUpperCase());setScreen('lobby');}
     const saved = sessionStorage.getItem('trust-garden-session');
     if (saved) { try { const data = JSON.parse(saved); if (data.code && data.token && (data.seat === 'A' || data.seat === 'B')) connect(data); } catch { sessionStorage.removeItem('trust-garden-session'); } }
     return () => { socket.current?.close(); };
   }, []);
+  const inviteLink=session?window.location.origin+window.location.pathname+'?room='+encodeURIComponent(session.code):'';
+  const requestRematch=()=>{
+    if(mode!=='online'||socket.current?.readyState!==WebSocket.OPEN||votedRematch)return;
+    socket.current.send(JSON.stringify({type:'match.rematch'}));
+    setVotedRematch(true);
+  };
+  const reconnect=()=>{if(session)connect(session);};
   const createRoom = async () => {
     try { const res = await fetch(api + '/rooms', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({h})}); if (!res.ok) throw Error('Could not create room'); connect(await res.json()); } catch(e) {setConnection(String(e));}
   };
@@ -157,7 +173,7 @@ function App() {
   const moodFor = (seat:0|1):'thinking'|'smug'|'furious' => !lastPayoffs || lastPayoffs[0] === lastPayoffs[1] ? 'thinking' : lastPayoffs[seat] > lastPayoffs[1-seat] ? 'smug' : 'furious';
   const cooperation = visibleHistory.filter(t => t.a === 'C' && t.b === 'C').length;
   const resultStory = a === 'C' && b === 'C' ? 'Cả hai chọn Đồng lòng (không dùng AI).' : a === 'D' && b === 'D' ? 'Cả hai chọn Âm thầm (đăng ký AI và trả phí).' : 'Hai bên đưa ra lựa chọn khác nhau. Lợi nhuận được tính theo mô hình Cournot.';
-  const reset = () => { socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setTournamentMatches([]); setH(3); };
+  const reset = () => { setVotedRematch(false); socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setTournamentMatches([]); setH(3); };
   const rematch = () => {
     if (mode === 'online') return;
     setA(null); setB(null); setHistory([]); setRound(1); setRecordedMatch(false); setIsRematch(true);
@@ -238,7 +254,9 @@ function App() {
           <p>Or join your friend's room:</p><input aria-label="Room code" placeholder="ROOM CODE" maxLength={6} value={invite} onChange={e=>setInvite(e.target.value)} />
           <button className="secondary" onClick={joinRoom}>Join room</button>
           {session && <p><strong>Room {session.code}</strong> · H={h} · Seat {session.seat} · {players}/2 players</p>}
-          <p role="status">{connection}</p>
+          {session && <div><p>🔗 Mời bạn bè bằng liên kết:</p><input readOnly aria-label="Liên kết mời" value={inviteLink} style={{maxWidth:'100%',letterSpacing:0,textTransform:'none'}}/><button className="secondary" onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>setConnection('Đã sao chép liên kết')).catch(()=>setConnection('Không thể sao chép tự động'))}>📋 Sao chép liên kết</button></div>}
+          {session && connection!=='Connected' && <button className="secondary" onClick={reconnect}>↻ Kết nối lại</button>}
+          <p role="status">{connection} · {connectedPlayers}/2 đang kết nối</p>
         </div>
         <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>Đối thủ máy tính có cách chơi riêng. Hãy khám phá qua từng vòng.</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setRecordedMatch(false);setIsRematch(false);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
         <div className="choice-card"><h2>🏆 TOURNAMENT · 4 ĐỐI THỦ</h2><p>Vòng tròn 5 đối thủ: bạn đấu 4 bot (40 vòng), sau đó 6 trận bot-vs-bot chạy tự động. Mỗi trận 10 vòng, cùng H={h}. Xếp hạng theo tổng payoff.</p><button className="primary" onClick={()=>{setMode('tournament');setTournamentMatches([]);setBotType(tournamentOrder[0]);setA(null);setB(null);setHistory([]);setRound(1);setRecordedMatch(false);setIsRematch(false);setScreen('game');}}>Bắt đầu Tournament</button></div>
@@ -257,9 +275,10 @@ function App() {
       <div className="scoreboard"><div>MILO <strong>{fmt(totalA)}</strong> profit</div><div>LUNA <strong>{fmt(totalB)}</strong> profit</div></div>
       {mode === 'online' ? <div className="choice-card">
         <h2>YOU ARE {session?.seat === 'A' ? 'MILO' : 'LUNA'} · {connection}</h2>
-        <p>{submitted ? 'Choice locked. Waiting for the other firm…' : 'Lựa chọn Đồng lòng / Âm thầm được giữ bí mật đến khi cả hai quyết định.'}</p>
-        <div className="choice-buttons"><button disabled={submitted || players < 2} onClick={()=>onlineChoose('C')}>🤝 Đồng lòng</button><button disabled={submitted || players < 2} onClick={()=>onlineChoose('D')}>🤫 Âm thầm</button></div>
-        <p>{players}/2 players connected to room {session?.code}</p>
+        <p>{connectedPlayers<2?'Đang đợi đối thủ kết nối hoặc quay lại trận…':submitted?'Đã chọn. Đang đợi đối thủ…':'Lựa chọn được giữ bí mật đến khi cả hai quyết định.'}</p>
+        <div className="choice-buttons"><button disabled={submitted || connectedPlayers < 2 || connection!=='Connected'} onClick={()=>onlineChoose('C')}>🤝 Đồng lòng</button><button disabled={submitted || connectedPlayers < 2 || connection!=='Connected'} onClick={()=>onlineChoose('D')}>🤫 Âm thầm</button></div>
+        <p>{connectedPlayers}/2 người đang kết nối · Phòng {session?.code}</p>
+        {connection!=='Connected' && <button className="secondary" onClick={reconnect}>↻ Kết nối lại</button>}
         {onlineHistory.length > 0 && <p>Last round: Milo {label(onlineHistory[onlineHistory.length-1].a)}, Luna {label(onlineHistory[onlineHistory.length-1].b)} · {fmt(onlineHistory[onlineHistory.length-1].pa)} / {fmt(onlineHistory[onlineHistory.length-1].pb)}</p>}
       </div> : (mode === 'bot' || mode === 'tournament') && !revealed ? <div className="choice-card"><h2>MILO · LƯỢT CỦA BẠN</h2><p>Bạn đang đấu với {botNames[botType]}, một đối thủ máy tính. Cả hai lựa chọn được công bố cùng lúc.</p><div className="choice-buttons"><button onClick={()=>chooseAgainstBot('C')}>🤝 Đồng lòng</button><button onClick={()=>chooseAgainstBot('D')}>🤫 Âm thầm</button></div></div> : !revealed ? <div className="choice-grid">
         {([{ who: 'MILO', value: a, setter: setA }, { who: 'LUNA', value: b, setter: setB }] as const).map(player => <div className="choice-card" key={player.who}>
@@ -292,7 +311,8 @@ function App() {
       <div className="dialogue"><span className="speaker">THE STORYTELLER</span><p>Over {MAX_ROUNDS} rounds at H={h}, neither firm subscribed in {cooperation} rounds. Milo subscribed in {visibleHistory.filter(t=>t.a==='D').length} rounds and Luna in {visibleHistory.filter(t=>t.b==='D').length}. These are descriptive outcomes, not evidence of an optimal strategy.</p></div>
       <h2 className="history-title">All 10 rounds</h2>
       <div className="history-list">{visibleHistory.map(t => <div className="history-row" key={t.round}><span>Round {t.round}</span><span>{label(t.a)} / {label(t.b)}</span><strong>{fmt(t.pa)} / {fmt(t.pb)}</strong></div>)}</div>
-      <div className="actions">{mode !== 'online' && <button className="primary" onClick={rematch}>⚔️ Đấu lại ngay ↻</button>}<button className="secondary" onClick={reset}>Chọn chế độ khác</button></div>
+      {mode==='online'&&<p className="bot-banner">Phòng {session?.code} · {rematchVotes}/2 người yêu cầu tái đấu. Cả hai cần đồng ý để bắt đầu trận mới.</p>}
+      <div className="actions">{mode==='online'&&<button className="primary" disabled={votedRematch||connection!=='Connected'} onClick={requestRematch}>{votedRematch?'Đang đợi đối thủ…':'⚔️ Mời tái đấu ↻'}</button>}{mode !== 'online' && <button className="primary" onClick={rematch}>⚔️ Đấu lại ngay ↻</button>}<button className="secondary" onClick={reset}>Chọn chế độ khác</button></div>
     </section>}
     <footer>AXELROD–COURNOT HUMAN DECISION EXPERIMENT · THE TRUST GARDEN</footer>
   </main>;
