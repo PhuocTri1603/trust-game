@@ -7,7 +7,9 @@ type BotType = 'random' | 'cooperate' | 'defect' | 'tit_for_tat';
 const botNames:Record<BotType,string> = {random:'Nori',cooperate:'Pip',defect:'Rex',tit_for_tat:'Kiko'};
 const botDescriptions:Record<BotType,string> = {random:'Chọn Đồng lòng hoặc Âm thầm ngẫu nhiên, xác suất 50/50.',cooperate:'Luôn chọn Đồng lòng.',defect:'Luôn chọn Âm thầm.',tit_for_tat:'Vòng đầu Đồng lòng; từ vòng 2 lặp lại lựa chọn của bạn ở vòng trước.'};
 const botChoice = (type:BotType,history:Turn[]):Choice => type === 'cooperate' ? 'C' : type === 'defect' ? 'D' : type === 'tit_for_tat' ? (history.length ? history[history.length-1].a : 'C') : (Math.random() < 0.5 ? 'C' : 'D');
-type Screen = 'intro' | 'tutorial' | 'lobby' | 'game' | 'final';
+type Screen = 'intro' | 'tutorial' | 'lobby' | 'game' | 'final' | 'ranking';
+type MatchResult = { bot:BotType; turns:Turn[]; humanProfit:number; botProfit:number };
+const tournamentOrder:BotType[] = ['random','cooperate','defect','tit_for_tat'];
 type Turn = { round: number; a: Choice; b: Choice; pa: number; pb: number };
 const payoff = (a:Choice,b:Choice,h:number):[number,number] => { const x=Number(a==='D'),y=Number(b==='D'); return [Math.round(h*(8+2*x-y)**2/9-10*x),Math.round(h*(8+2*y-x)**2/9-10*y)]; };
 const fmt=(n:number)=>n.toFixed(0);
@@ -32,9 +34,10 @@ function Garden({ moodA, moodB }: { moodA?: 'happy' | 'sad' | 'thinking' | 'smug
 
 function App() {
   const [screen, setScreen] = useState<Screen>('intro');
-  const [mode, setMode] = useState<'local' | 'online' | 'bot'>('local');
+  const [mode, setMode] = useState<'local' | 'online' | 'bot' | 'tournament'>('local');
   const [invite, setInvite] = useState('');
   const [botType,setBotType] = useState<BotType>('random');
+  const [tournamentMatches,setTournamentMatches] = useState<MatchResult[]>([]);
   const [h,setH] = useState(3);
   const [session, setSession] = useState<{code:string;token:string;seat:'A'|'B'} | null>(null);
   const [connection, setConnection] = useState('Not connected');
@@ -92,6 +95,10 @@ function App() {
   const revealed = a !== null && b !== null;
   const scores = revealed ? payoff(a,b,h) : null;
   const visibleHistory = mode === 'online' ? onlineHistory : history;
+  const tournamentRanking = mode === 'tournament' ? [
+    {name:'Milo (Bạn)', profit:tournamentMatches.reduce((sum,m)=>sum+m.humanProfit,0), rounds:tournamentMatches.reduce((sum,m)=>sum+m.turns.length,0)},
+    ...tournamentMatches.map(m=>({name:botNames[m.bot],profit:m.botProfit,rounds:m.turns.length}))
+  ].sort((x,y)=>y.profit/y.rounds-x.profit/x.rounds) : [];
   const totalA = visibleHistory.reduce((sum, t) => sum + t.pa, 0) + (mode !== 'online' ? (scores?.[0] ?? 0) : 0);
   const totalB = visibleHistory.reduce((sum, t) => sum + t.pb, 0) + (mode !== 'online' ? (scores?.[1] ?? 0) : 0);
   const latest = visibleHistory[visibleHistory.length - 1];
@@ -99,9 +106,9 @@ function App() {
   const moodFor = (seat:0|1):'thinking'|'smug'|'furious' => !lastPayoffs || lastPayoffs[0] === lastPayoffs[1] ? 'thinking' : lastPayoffs[seat] > lastPayoffs[1-seat] ? 'smug' : 'furious';
   const cooperation = visibleHistory.filter(t => t.a === 'C' && t.b === 'C').length;
   const resultStory = a === 'C' && b === 'C' ? 'Cả hai chọn Đồng lòng (không dùng AI).' : a === 'D' && b === 'D' ? 'Cả hai chọn Âm thầm (đăng ký AI và trả phí).' : 'Hai bên đưa ra lựa chọn khác nhau. Lợi nhuận được tính theo mô hình Cournot.';
-  const reset = () => { socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setH(3); };
+  const reset = () => { socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setTournamentMatches([]); setH(3); };
   const chooseAgainstBot = (choice:Choice) => {
-    if (mode !== 'bot' || a !== null || b !== null) return;
+    if ((mode !== 'bot' && mode !== 'tournament') || a !== null || b !== null) return;
     const reply = botChoice(botType, history);
     setA(choice);
     setB(reply);
@@ -110,7 +117,15 @@ function App() {
     if (!a || !b || !scores) return;
     const next = [...history, { round, a, b, pa: scores[0], pb: scores[1] }];
     setHistory(next); setA(null); setB(null);
-    if (round === MAX_ROUNDS) setScreen('final');
+    if (round === MAX_ROUNDS) {
+      if (mode === 'tournament') {
+        const completed:MatchResult = {bot:botType,turns:next,humanProfit:next.reduce((sum,t)=>sum+t.pa,0),botProfit:next.reduce((sum,t)=>sum+t.pb,0)};
+        const updated=[...tournamentMatches,completed];
+        setTournamentMatches(updated);
+        if (updated.length === tournamentOrder.length) setScreen('ranking');
+        else {setBotType(tournamentOrder[updated.length]);setRound(1);setScreen('game');}
+      } else setScreen('final');
+    }
     else setRound(round + 1);
   };
 
@@ -147,6 +162,7 @@ function App() {
           <p role="status">{connection}</p>
         </div>
         <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>Đối thủ máy tính có cách chơi riêng. Hãy khám phá qua từng vòng.</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
+        <div className="choice-card"><h2>🏆 TOURNAMENT · 4 ĐỐI THỦ</h2><p>Đấu lần lượt với Nori, Pip, Rex và Kiko. Mỗi trận 10 vòng, cùng H={h}. Xếp hạng cuối theo lợi nhuận trung bình mỗi vòng.</p><button className="primary" onClick={()=>{setMode('tournament');setTournamentMatches([]);setBotType(tournamentOrder[0]);setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Bắt đầu Tournament</button></div>
         <div className="choice-card"><h2>LOCAL · ONE DEVICE</h2><p>Explore both firms on one device. This demo does not conceal choices from the person holding the device.</p>
           <button className="secondary" onClick={() => {setMode('local');setScreen('game');}}>Try local demo (H={h})</button>
         </div>
@@ -156,6 +172,7 @@ function App() {
     {screen === 'game' && <section className="story-screen">
       <div className="eyebrow">CHAPTER FOUR · AI COMPETITION</div>
       <div className="game-heading"><h1>Đồng lòng hay Âm thầm?</h1><span className="round-pill">ROUND {round} / {MAX_ROUNDS} · H={h}</span></div>
+      {mode === 'tournament' && <p className="bot-banner">🏆 Trận {tournamentMatches.length+1}/{tournamentOrder.length} · Bạn đấu với <strong>{botNames[botType]}</strong> · {tournamentMatches.length} trận đã hoàn tất</p>}
       {mode === "bot" && <p className="bot-banner">🤖 Bạn là Milo · Đối thủ Luna: <strong>{botNames[botType]}</strong></p>}
       <Garden moodA={moodFor(0)} moodB={moodFor(1)} />
       <div className="scoreboard"><div>MILO <strong>{fmt(totalA)}</strong> profit</div><div>LUNA <strong>{fmt(totalB)}</strong> profit</div></div>
@@ -165,7 +182,7 @@ function App() {
         <div className="choice-buttons"><button disabled={submitted || players < 2} onClick={()=>onlineChoose('C')}>🤝 Đồng lòng</button><button disabled={submitted || players < 2} onClick={()=>onlineChoose('D')}>🤫 Âm thầm</button></div>
         <p>{players}/2 players connected to room {session?.code}</p>
         {onlineHistory.length > 0 && <p>Last round: Milo {label(onlineHistory[onlineHistory.length-1].a)}, Luna {label(onlineHistory[onlineHistory.length-1].b)} · {fmt(onlineHistory[onlineHistory.length-1].pa)} / {fmt(onlineHistory[onlineHistory.length-1].pb)}</p>}
-      </div> : mode === 'bot' && !revealed ? <div className="choice-card"><h2>MILO · LƯỢT CỦA BẠN</h2><p>Bạn đang đấu với {botNames[botType]}, một đối thủ máy tính. Cả hai lựa chọn được công bố cùng lúc.</p><div className="choice-buttons"><button onClick={()=>chooseAgainstBot('C')}>🤝 Đồng lòng</button><button onClick={()=>chooseAgainstBot('D')}>🤫 Âm thầm</button></div></div> : !revealed ? <div className="choice-grid">
+      </div> : (mode === 'bot' || mode === 'tournament') && !revealed ? <div className="choice-card"><h2>MILO · LƯỢT CỦA BẠN</h2><p>Bạn đang đấu với {botNames[botType]}, một đối thủ máy tính. Cả hai lựa chọn được công bố cùng lúc.</p><div className="choice-buttons"><button onClick={()=>chooseAgainstBot('C')}>🤝 Đồng lòng</button><button onClick={()=>chooseAgainstBot('D')}>🤫 Âm thầm</button></div></div> : !revealed ? <div className="choice-grid">
         {([{ who: 'MILO', value: a, setter: setA }, { who: 'LUNA', value: b, setter: setB }] as const).map(player => <div className="choice-card" key={player.who}>
           <h2>{player.who}'S TURN</h2><p>{player.value ? 'Choice locked. Waiting for the other firm.' : 'Chọn Đồng lòng hoặc Âm thầm.'}</p>
           <div className="choice-buttons"><button disabled={player.value !== null} onClick={() => player.setter('C')}>🤝 Đồng lòng</button><button disabled={player.value !== null} onClick={() => player.setter('D')}>🤫 Âm thầm</button></div>
@@ -177,8 +194,9 @@ function App() {
         <p>{resultStory}</p><div className="reveal-points">Milo {fmt(scores![0])} <span>⚙</span> Luna {fmt(scores![1])}</div>
         <button className="primary" onClick={advance}>{round === MAX_ROUNDS ? 'See results →' : 'Next round →'}</button>
       </div>}
-      <p className="disclaimer">{mode === 'bot' ? 'Đấu với bot: chiến lược đối thủ được công khai; kết quả chỉ lưu trong phiên trình duyệt này, chưa có database.' : mode === 'local' ? 'Local two-seat demonstration: both choices are made on this device.' : 'Online prototype: room state is held in server memory; restarting the backend ends the session.'}</p>
+      <p className="disclaimer">{mode === 'bot' || mode === 'tournament' ? 'Đối thủ là máy tính; chiến lược không được tiết lộ. Kết quả chỉ lưu tạm trong phiên chơi, chưa có database.' : mode === 'local' ? 'Local two-seat demonstration: both choices are made on this device.' : 'Online prototype: room state is held in server memory; restarting the backend ends the session.'}</p>
     </section>}
+    {screen === 'ranking' && <section className="story-screen"><div className="eyebrow">🏆 TOURNAMENT COMPLETE · H={h}</div><h1>Bảng xếp hạng cuối cùng</h1><p>4 trận · 10 vòng mỗi trận · Xếp hạng theo lợi nhuận trung bình mỗi vòng (không phải tổng lợi nhuận).</p><div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>Hạng</th><th>Đối thủ</th><th>Lợi nhuận / vòng</th><th>Tổng lợi nhuận</th><th>Số vòng</th></tr></thead><tbody>{tournamentRanking.map((entry,i)=><tr key={entry.name} className={entry.name==='Milo (Bạn)'?'ranking-human':''}><td>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td><td>{entry.name}</td><td><strong>{(entry.profit/entry.rounds).toFixed(2)}</strong></td><td>{fmt(entry.profit)}</td><td>{entry.rounds}</td></tr>)}</tbody></table></div><h2 className="history-title">Kết quả từng trận</h2><div className="history-list">{tournamentMatches.map((m,i)=><div className="history-row" key={m.bot}><span>Trận {i+1}</span><span>Milo vs {botNames[m.bot]} · {m.humanProfit>m.botProfit?'Thắng':m.humanProfit<m.botProfit?'Thua':'Hòa'}</span><strong>{fmt(m.humanProfit)} / {fmt(m.botProfit)}</strong></div>)}</div><p className="disclaimer">Đây là xếp hạng mô tả của 4 trận người-vs-bot, không phải giải vòng tròn giữa 5 người chơi. Kết quả chưa được lưu lâu dài.</p><button className="primary" onClick={reset}>Chơi giải mới ↻</button></section>}
     {screen === 'final' && <section className="story-screen">
       <div className="eyebrow">FINAL RESULTS · WHAT DID YOU EARN?</div>{mode === "bot" && <p className="bot-banner">🤖 Trận đấu Người vs Bot · Luna: <strong>{botNames[botType]}</strong></p>}<h1>Every decision shapes the market.</h1><Garden moodA={totalA===totalB?'thinking':totalA>totalB?'smug':'furious'} moodB={totalA===totalB?'thinking':totalB>totalA?'smug':'furious'} />
       <div className="final-scores"><div><span>MILO</span><strong>{fmt(totalA)}</strong><small>cumulative profit</small></div><div><span>LUNA</span><strong>{fmt(totalB)}</strong><small>cumulative profit</small></div></div>
