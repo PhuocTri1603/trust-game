@@ -44,3 +44,17 @@ def test_room_full_and_h_validation():
     a = client.post("/rooms",json={"h":4}).json()
     assert client.post("/rooms/join",json={"code":a["code"]}).status_code == 200
     assert client.post("/rooms/join",json={"code":a["code"]}).status_code == 409
+
+
+def test_matchmaking_pairs_same_h_and_does_not_steal_private_room():
+    client = TestClient(app)
+    private = client.post("/rooms", json={"h":3}).json()
+    first = client.post("/matchmaking/join", json={"h":3}).json()
+    second = client.post("/matchmaking/join", json={"h":4}).json()
+    partner = client.post("/matchmaking/join", json={"h":3}).json()
+    assert first["seat"] == "A" and partner["seat"] == "B"
+    assert first["code"] == partner["code"]
+    assert first["code"] != private["code"]
+    assert second["code"] != first["code"]
+    assert first["token"] != partner["token"]
+    assert client.post("/matchmaking/join", json={"h":0}).status_code == 422
