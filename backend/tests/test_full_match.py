@@ -9,7 +9,7 @@ def clear_rooms():
     yield
     rooms.clear()
 
-def test_two_hundred_rounds_and_hidden_action():
+def test_ten_rounds_and_hidden_action():
     client = TestClient(app)
     host = client.post("/rooms",json={"h":4}).json()
     guest = client.post("/rooms/join",json={"code":host["code"]}).json()
