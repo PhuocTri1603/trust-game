@@ -31,3 +31,17 @@
 .bot-banner{background:#eef4fc;border:2px solid #b7cbe4;border-radius:14px;padding:12px 16px;font-size:14px;line-height:1.6;margin:14px auto;color:#304b6b}.choice-card select{max-width:100%;font:inherit}
 
 .ranking-scroll{overflow-x:auto;margin:20px auto}.ranking-table{width:100%;border-collapse:collapse;text-align:left;min-width:540px}.ranking-table th,.ranking-table td{padding:12px 10px;border-bottom:1px solid #e6dfd0}.ranking-table th{font-size:12px;color:#78694e}.ranking-table .ranking-human{background:#e7f0dd;font-weight:700}.ranking-table td:nth-child(n+3){font-variant-numeric:tabular-nums}
+
+/* Sprint 5: cosmetic-only, XP-unlocked garden environments. */
+.theme-picker{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:12px auto 20px}
+.theme-option{padding:10px 12px;border:2px solid #b9cdb2;border-radius:12px;background:#fff;color:#254534;font-weight:700}
+.theme-option.selected{border-color:#397953;background:#e2f2dd}
+.theme-option:disabled{opacity:.5}
+.theme-sunset .garden{background:linear-gradient(#f5a77d 0%,#ffd5a4 65%,#f5e3b1 100%);border-color:#e9ad83}
+.theme-sunset .hill-one{background:#e7ad80}.theme-sunset .hill-two{background:#cfa46c}
+.theme-sunset .sky-sun{color:#fff1a3}
+.theme-night .garden{background:linear-gradient(#203554 0%,#49617d 72%,#7d9a9d 100%);border-color:#344c68}
+.theme-night .hill-one{background:#456c65}.theme-night .hill-two{background:#365e58}
+.theme-night .sky-sun{color:#f7efc0}
+.theme-night .sky-sun::after{content:'✦  ✧  ✦';position:absolute;top:12px;right:80px;font-size:24px;color:#f7e9aa;white-space:nowrap}
+@media(max-width:640px){.theme-option{flex:1 1 100%;max-width:290px}}
