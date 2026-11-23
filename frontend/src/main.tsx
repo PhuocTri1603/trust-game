@@ -183,9 +183,9 @@ function App() {
         setTournamentMatches(updated);
         if (humanMatches.length === tournamentOrder.length) {
           const mine=updated.filter(m=>m.first==='human').reduce((sum,m)=>sum+m.firstProfit,0);
-          const others=updated.filter(m=>m.second==='human').reduce((sum,m)=>sum+m.secondProfit,0);
+          const others=Math.max(...tournamentOrder.map(bot=>updated.filter(m=>m.first===bot||m.second===bot).reduce((sum,m)=>sum+(m.first===bot?m.firstProfit:m.secondProfit),0)));
           // Tournament progress counts once, not once per bot match.
-          saveResult('Tournament',mine,others);
+          saveResult('Tournament (đối thủ dẫn đầu)',mine,others);
           setScreen('ranking');
         }
         else {setBotType(tournamentOrder[humanMatches.length]);setHistory([]);setRound(1);setScreen('game');}
