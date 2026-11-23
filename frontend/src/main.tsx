@@ -139,7 +139,7 @@ function App() {
         const updated=humanMatches.length===tournamentOrder.length ? [...humanMatches,...tournamentOrder.flatMap((first,i)=>tournamentOrder.slice(i+1).map(second=>simulateBotMatch(first,second,h)))] : humanMatches;
         setTournamentMatches(updated);
         if (humanMatches.length === tournamentOrder.length) setScreen('ranking');
-        else {setBotType(tournamentOrder[humanMatches.length]);setRound(1);setScreen('game');}
+        else {setBotType(tournamentOrder[humanMatches.length]);setHistory([]);setRound(1);setScreen('game');}
       } else setScreen('final');
     }
     else setRound(round + 1);
