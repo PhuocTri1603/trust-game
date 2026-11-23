@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client';
 import './style.css';
 
 type Choice = 'C' | 'D';
+type BotType = 'random' | 'cooperate' | 'defect' | 'tit_for_tat';
+const botNames:Record<BotType,string> = {random:'Random Bot',cooperate:'Always Cooperate',defect:'Always Defect',tit_for_tat:'Tit-for-Tat'};
+const botDescriptions:Record<BotType,string> = {random:'Chọn Đồng lòng hoặc Âm thầm ngẫu nhiên, xác suất 50/50.',cooperate:'Luôn chọn Đồng lòng.',defect:'Luôn chọn Âm thầm.',tit_for_tat:'Vòng đầu Đồng lòng; từ vòng 2 lặp lại lựa chọn của bạn ở vòng trước.'};
+const botChoice = (type:BotType,history:Turn[]):Choice => type === 'cooperate' ? 'C' : type === 'defect' ? 'D' : type === 'tit_for_tat' ? (history.length ? history[history.length-1].a : 'C') : (Math.random() < 0.5 ? 'C' : 'D');
 type Screen = 'intro' | 'tutorial' | 'lobby' | 'game' | 'final';
 type Turn = { round: number; a: Choice; b: Choice; pa: number; pb: number };
 const payoff = (a:Choice,b:Choice,h:number):[number,number] => { const x=Number(a==='D'),y=Number(b==='D'); return [Math.round(h*(8+2*x-y)**2/9-10*x),Math.round(h*(8+2*y-x)**2/9-10*y)]; };
@@ -28,8 +32,9 @@ function Garden({ moodA, moodB }: { moodA?: 'happy' | 'sad' | 'thinking' | 'smug
 
 function App() {
   const [screen, setScreen] = useState<Screen>('intro');
-  const [mode, setMode] = useState<'local' | 'online'>('local');
+  const [mode, setMode] = useState<'local' | 'online' | 'bot'>('local');
   const [invite, setInvite] = useState('');
+  const [botType,setBotType] = useState<BotType>('random');
   const [h,setH] = useState(3);
   const [session, setSession] = useState<{code:string;token:string;seat:'A'|'B'} | null>(null);
   const [connection, setConnection] = useState('Not connected');
@@ -87,14 +92,20 @@ function App() {
   const revealed = a !== null && b !== null;
   const scores = revealed ? payoff(a,b,h) : null;
   const visibleHistory = mode === 'online' ? onlineHistory : history;
-  const totalA = visibleHistory.reduce((sum, t) => sum + t.pa, 0) + (mode === 'local' ? (scores?.[0] ?? 0) : 0);
-  const totalB = visibleHistory.reduce((sum, t) => sum + t.pb, 0) + (mode === 'local' ? (scores?.[1] ?? 0) : 0);
+  const totalA = visibleHistory.reduce((sum, t) => sum + t.pa, 0) + (mode !== 'online' ? (scores?.[0] ?? 0) : 0);
+  const totalB = visibleHistory.reduce((sum, t) => sum + t.pb, 0) + (mode !== 'online' ? (scores?.[1] ?? 0) : 0);
   const latest = visibleHistory[visibleHistory.length - 1];
-  const lastPayoffs: [number,number] | null = mode === 'local' && scores ? scores : latest ? [latest.pa, latest.pb] : null;
+  const lastPayoffs: [number,number] | null = mode !== 'online' && scores ? scores : latest ? [latest.pa, latest.pb] : null;
   const moodFor = (seat:0|1):'thinking'|'smug'|'furious' => !lastPayoffs || lastPayoffs[0] === lastPayoffs[1] ? 'thinking' : lastPayoffs[seat] > lastPayoffs[1-seat] ? 'smug' : 'furious';
   const cooperation = visibleHistory.filter(t => t.a === 'C' && t.b === 'C').length;
   const resultStory = a === 'C' && b === 'C' ? 'Cả hai chọn Đồng lòng (không dùng AI).' : a === 'D' && b === 'D' ? 'Cả hai chọn Âm thầm (đăng ký AI và trả phí).' : 'Hai bên đưa ra lựa chọn khác nhau. Lợi nhuận được tính theo mô hình Cournot.';
-  const reset = () => { socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setH(3); };
+  const reset = () => { socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setH(3); };
+  const chooseAgainstBot = (choice:Choice) => {
+    if (mode !== 'bot' || a !== null || b !== null) return;
+    const reply = botChoice(botType, history);
+    setA(choice);
+    setB(reply);
+  };
   const advance = () => {
     if (!a || !b || !scores) return;
     const next = [...history, { round, a, b, pa: scores[0], pb: scores[1] }];
@@ -127,7 +138,7 @@ function App() {
     </section>}
     {screen === 'lobby' && <section className="story-screen">
       <div className="eyebrow">CHAPTER THREE · INVITE A FRIEND</div><h1>Every market needs two firms.</h1><Garden />
-      <div className="dialogue"><span className="speaker">CHOOSE HOW TO PLAY</span><p>Both firms join from separate devices. The host selects H (1–6) before creating the room. The same H applies to all 10 rounds.</p></div>
+      <div className="dialogue"><span className="speaker">CHOOSE HOW TO PLAY</span><p>Chọn đấu với người thật trên hai thiết bị, chơi thử trên một thiết bị, hoặc đấu với một trong bốn bot. H (1–6) được cố định trong 10 vòng.</p></div>
       <div className="dialogue"><span className="speaker">PAYOFF MATRIX · H={h}</span><table className="payoff-table"><thead><tr><th>Milo / Luna</th><th>Đồng lòng</th><th>Âm thầm</th></tr></thead><tbody>{([["C","C"],["C","D"],["D","C"],["D","D"]] as Choice[][]).filter((_,i)=>i===0||i===1||i===2||i===3).map(([x,y],i)=><tr key={i}><th>{label(x)} / {label(y)}</th><td colSpan={2}>{fmt(payoff(x,y,h)[0])} / {fmt(payoff(x,y,h)[1])}</td></tr>)}</tbody></table><p>Payoffs shown as Milo / Luna. H={h}, m=8, d=1, F=10. Payoffs are rounded to whole numbers each round. Negative payoffs are possible.</p></div><div className="choice-grid">
         <div className="choice-card"><h2>ONLINE · TWO DEVICES</h2><label htmlFor="h-select">AI benefit horizon H: </label><select id="h-select" value={h} disabled={!!session} onChange={e=>setH(Number(e.target.value))}>{[1,2,3,4,5,6].map(v=><option key={v} value={v}>{v}</option>)}</select><button className="primary" onClick={createRoom}>Create private room</button>
           <p>Or join your friend's room:</p><input aria-label="Room code" placeholder="ROOM CODE" maxLength={6} value={invite} onChange={e=>setInvite(e.target.value)} />
@@ -135,6 +146,7 @@ function App() {
           {session && <p><strong>Room {session.code}</strong> · H={h} · Seat {session.seat} · {players}/2 players</p>}
           <p role="status">{connection}</p>
         </div>
+        <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>{botDescriptions[botType]}</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
         <div className="choice-card"><h2>LOCAL · ONE DEVICE</h2><p>Explore both firms on one device. This demo does not conceal choices from the person holding the device.</p>
           <button className="secondary" onClick={() => {setMode('local');setScreen('game');}}>Try local demo (H={h})</button>
         </div>
@@ -144,6 +156,7 @@ function App() {
     {screen === 'game' && <section className="story-screen">
       <div className="eyebrow">CHAPTER FOUR · AI COMPETITION</div>
       <div className="game-heading"><h1>Đồng lòng hay Âm thầm?</h1><span className="round-pill">ROUND {round} / {MAX_ROUNDS} · H={h}</span></div>
+      {mode === "bot" && <p className="bot-banner">🤖 Bạn là Milo · Đối thủ Luna: <strong>{botNames[botType]}</strong> · {botDescriptions[botType]}</p>}
       <Garden moodA={moodFor(0)} moodB={moodFor(1)} />
       <div className="scoreboard"><div>MILO <strong>{fmt(totalA)}</strong> profit</div><div>LUNA <strong>{fmt(totalB)}</strong> profit</div></div>
       {mode === 'online' ? <div className="choice-card">
@@ -152,7 +165,7 @@ function App() {
         <div className="choice-buttons"><button disabled={submitted || players < 2} onClick={()=>onlineChoose('C')}>🤝 Đồng lòng</button><button disabled={submitted || players < 2} onClick={()=>onlineChoose('D')}>🤫 Âm thầm</button></div>
         <p>{players}/2 players connected to room {session?.code}</p>
         {onlineHistory.length > 0 && <p>Last round: Milo {label(onlineHistory[onlineHistory.length-1].a)}, Luna {label(onlineHistory[onlineHistory.length-1].b)} · {fmt(onlineHistory[onlineHistory.length-1].pa)} / {fmt(onlineHistory[onlineHistory.length-1].pb)}</p>}
-      </div> : !revealed ? <div className="choice-grid">
+      </div> : mode === 'bot' && !revealed ? <div className="choice-card"><h2>MILO · LƯỢT CỦA BẠN</h2><p>Đối thủ là bot {botNames[botType]}. Bot sẽ quyết định khi bạn chọn, và cả hai lựa chọn được công bố cùng lúc.</p><div className="choice-buttons"><button onClick={()=>chooseAgainstBot('C')}>🤝 Đồng lòng</button><button onClick={()=>chooseAgainstBot('D')}>🤫 Âm thầm</button></div></div> : !revealed ? <div className="choice-grid">
         {([{ who: 'MILO', value: a, setter: setA }, { who: 'LUNA', value: b, setter: setB }] as const).map(player => <div className="choice-card" key={player.who}>
           <h2>{player.who}'S TURN</h2><p>{player.value ? 'Choice locked. Waiting for the other firm.' : 'Chọn Đồng lòng hoặc Âm thầm.'}</p>
           <div className="choice-buttons"><button disabled={player.value !== null} onClick={() => player.setter('C')}>🤝 Đồng lòng</button><button disabled={player.value !== null} onClick={() => player.setter('D')}>🤫 Âm thầm</button></div>
@@ -164,10 +177,10 @@ function App() {
         <p>{resultStory}</p><div className="reveal-points">Milo {fmt(scores![0])} <span>⚙</span> Luna {fmt(scores![1])}</div>
         <button className="primary" onClick={advance}>{round === MAX_ROUNDS ? 'See results →' : 'Next round →'}</button>
       </div>}
-      <p className="disclaimer">{mode === 'local' ? 'Local two-seat demonstration: both choices are made on this device.' : 'Online prototype: room state is held in server memory; restarting the backend ends the session.'}</p>
+      <p className="disclaimer">{mode === 'bot' ? 'Đấu với bot: chiến lược đối thủ được công khai; kết quả chỉ lưu trong phiên trình duyệt này, chưa có database.' : mode === 'local' ? 'Local two-seat demonstration: both choices are made on this device.' : 'Online prototype: room state is held in server memory; restarting the backend ends the session.'}</p>
     </section>}
     {screen === 'final' && <section className="story-screen">
-      <div className="eyebrow">FINAL RESULTS · WHAT DID YOU EARN?</div><h1>Every decision shapes the market.</h1><Garden moodA={totalA===totalB?'thinking':totalA>totalB?'smug':'furious'} moodB={totalA===totalB?'thinking':totalB>totalA?'smug':'furious'} />
+      <div className="eyebrow">FINAL RESULTS · WHAT DID YOU EARN?</div>{mode === "bot" && <p className="bot-banner">🤖 Trận đấu Người vs Bot · Luna: <strong>{botNames[botType]}</strong></p>}<h1>Every decision shapes the market.</h1><Garden moodA={totalA===totalB?'thinking':totalA>totalB?'smug':'furious'} moodB={totalA===totalB?'thinking':totalB>totalA?'smug':'furious'} />
       <div className="final-scores"><div><span>MILO</span><strong>{fmt(totalA)}</strong><small>cumulative profit</small></div><div><span>LUNA</span><strong>{fmt(totalB)}</strong><small>cumulative profit</small></div></div>
       <div className="dialogue"><span className="speaker">THE STORYTELLER</span><p>Over {MAX_ROUNDS} rounds at H={h}, neither firm subscribed in {cooperation} rounds. Milo subscribed in {visibleHistory.filter(t=>t.a==='D').length} rounds and Luna in {visibleHistory.filter(t=>t.b==='D').length}. These are descriptive outcomes, not evidence of an optimal strategy.</p></div>
       <h2 className="history-title">All 10 rounds</h2>
