@@ -145,6 +145,14 @@ function App() {
   const createRoom = async () => {
     try { const res = await fetch(api + '/rooms', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({h})}); if (!res.ok) throw Error('Could not create room'); connect(await res.json()); } catch(e) {setConnection(String(e));}
   };
+  const findOpponent = async () => {
+    try {
+      setConnection('Đang tìm đối thủ…');
+      const res=await fetch(api+'/matchmaking/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({h})});
+      if(!res.ok)throw Error('Không thể ghép trận lúc này');
+      connect(await res.json());
+    }catch(e){setConnection(String(e));}
+  };
   const joinRoom = async () => {
     try { const res = await fetch(api + '/rooms/join', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:invite.trim().toUpperCase()})}); if (!res.ok) throw Error('Room unavailable or full'); connect(await res.json()); } catch(e) {setConnection(String(e));}
   };
@@ -258,6 +266,7 @@ function App() {
           {session && connection!=='Connected' && <button className="secondary" onClick={reconnect}>↻ Kết nối lại</button>}
           <p role="status">{connection} · {connectedPlayers}/2 đang kết nối</p>
         </div>
+        <div className="choice-card"><h2>🎲 GHÉP TRẬN NGẪU NHIÊN</h2><p>Chơi PvP với người lạ có cùng H={h}. Nếu chưa có đối thủ, bạn sẽ đợi trong phòng chờ. Chưa có xếp hạng hoặc tài khoản.</p><button className="primary" disabled={!!session} onClick={findOpponent}>🔎 Tìm đối thủ</button><p>Ghép trận thử nghiệm: chỉ hoạt động khi backend đang trực tuyến.</p></div>
         <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>Đối thủ máy tính có cách chơi riêng. Hãy khám phá qua từng vòng.</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setRecordedMatch(false);setIsRematch(false);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
         <div className="choice-card"><h2>🏆 TOURNAMENT · 4 ĐỐI THỦ</h2><p>Vòng tròn 5 đối thủ: bạn đấu 4 bot (40 vòng), sau đó 6 trận bot-vs-bot chạy tự động. Mỗi trận 10 vòng, cùng H={h}. Xếp hạng theo tổng payoff.</p><button className="primary" onClick={()=>{setMode('tournament');setTournamentMatches([]);setBotType(tournamentOrder[0]);setA(null);setB(null);setHistory([]);setRound(1);setRecordedMatch(false);setIsRematch(false);setScreen('game');}}>Bắt đầu Tournament</button></div>
         <div className="choice-card"><h2>LOCAL · ONE DEVICE</h2><p>Explore both firms on one device. This demo does not conceal choices from the person holding the device.</p>
