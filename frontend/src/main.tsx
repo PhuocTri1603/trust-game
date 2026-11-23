@@ -8,7 +8,21 @@ const botNames:Record<BotType,string> = {random:'Nori',cooperate:'Pip',defect:'R
 const botDescriptions:Record<BotType,string> = {random:'Chọn Đồng lòng hoặc Âm thầm ngẫu nhiên, xác suất 50/50.',cooperate:'Luôn chọn Đồng lòng.',defect:'Luôn chọn Âm thầm.',tit_for_tat:'Vòng đầu Đồng lòng; từ vòng 2 lặp lại lựa chọn của bạn ở vòng trước.'};
 const botChoice = (type:BotType,history:Turn[]):Choice => type === 'cooperate' ? 'C' : type === 'defect' ? 'D' : type === 'tit_for_tat' ? (history.length ? history[history.length-1].a : 'C') : (Math.random() < 0.5 ? 'C' : 'D');
 type Screen = 'intro' | 'tutorial' | 'lobby' | 'game' | 'final' | 'ranking';
-type MatchResult = { bot:BotType; turns:Turn[]; humanProfit:number; botProfit:number };
+type Participant = 'human' | BotType;
+type MatchResult = { first:Participant; second:Participant; turns:Turn[]; firstProfit:number; secondProfit:number };
+const participants:Participant[]=['human','random','cooperate','defect','tit_for_tat'];
+const participantName=(p:Participant)=>p==='human'?'Milo (Bạn)':botNames[p];
+const simulateBotMatch=(first:BotType,second:BotType,h:number):MatchResult=>{
+  const turns:Turn[]=[];
+  for(let round=1;round<=MAX_ROUNDS;round++){
+    const firstHistory=turns;
+    const secondHistory=turns.map(t=>({...t,a:t.b,b:t.a,pa:t.pb,pb:t.pa}));
+    const a=botChoice(first,firstHistory),b=botChoice(second,secondHistory);
+    const [pa,pb]=payoff(a,b,h);
+    turns.push({round,a,b,pa,pb});
+  }
+  return {first,second,turns,firstProfit:turns.reduce((sum,t)=>sum+t.pa,0),secondProfit:turns.reduce((sum,t)=>sum+t.pb,0)};
+};
 const tournamentOrder:BotType[] = ['random','cooperate','defect','tit_for_tat'];
 type Turn = { round: number; a: Choice; b: Choice; pa: number; pb: number };
 const payoff = (a:Choice,b:Choice,h:number):[number,number] => { const x=Number(a==='D'),y=Number(b==='D'); return [Math.round(h*(8+2*x-y)**2/9-10*x),Math.round(h*(8+2*y-x)**2/9-10*y)]; };
@@ -95,10 +109,11 @@ function App() {
   const revealed = a !== null && b !== null;
   const scores = revealed ? payoff(a,b,h) : null;
   const visibleHistory = mode === 'online' ? onlineHistory : history;
-  const tournamentRanking = mode === 'tournament' ? [
-    {name:'Milo (Bạn)', profit:tournamentMatches.reduce((sum,m)=>sum+m.humanProfit,0), rounds:tournamentMatches.reduce((sum,m)=>sum+m.turns.length,0)},
-    ...tournamentMatches.map(m=>({name:botNames[m.bot],profit:m.botProfit,rounds:m.turns.length}))
-  ].sort((x,y)=>y.profit/y.rounds-x.profit/x.rounds) : [];
+  const tournamentRanking = participants.map(p=>{
+    const matches=tournamentMatches.filter(m=>m.first===p||m.second===p);
+    const profit=matches.reduce((sum,m)=>sum+(m.first===p?m.firstProfit:m.secondProfit),0);
+    return {id:p,name:participantName(p),profit,rounds:matches.reduce((sum,m)=>sum+m.turns.length,0),matches:matches.length};
+  }).sort((x,y)=>y.profit-x.profit || participants.indexOf(x.id)-participants.indexOf(y.id));
   const totalA = visibleHistory.reduce((sum, t) => sum + t.pa, 0) + (mode !== 'online' ? (scores?.[0] ?? 0) : 0);
   const totalB = visibleHistory.reduce((sum, t) => sum + t.pb, 0) + (mode !== 'online' ? (scores?.[1] ?? 0) : 0);
   const latest = visibleHistory[visibleHistory.length - 1];
@@ -119,11 +134,12 @@ function App() {
     setHistory(next); setA(null); setB(null);
     if (round === MAX_ROUNDS) {
       if (mode === 'tournament') {
-        const completed:MatchResult = {bot:botType,turns:next,humanProfit:next.reduce((sum,t)=>sum+t.pa,0),botProfit:next.reduce((sum,t)=>sum+t.pb,0)};
-        const updated=[...tournamentMatches,completed];
+        const completed:MatchResult = {first:'human',second:botType,turns:next,firstProfit:next.reduce((sum,t)=>sum+t.pa,0),secondProfit:next.reduce((sum,t)=>sum+t.pb,0)};
+        const humanMatches=[...tournamentMatches,completed];
+        const updated=humanMatches.length===tournamentOrder.length ? [...humanMatches,...tournamentOrder.flatMap((first,i)=>tournamentOrder.slice(i+1).map(second=>simulateBotMatch(first,second,h)))] : humanMatches;
         setTournamentMatches(updated);
-        if (updated.length === tournamentOrder.length) setScreen('ranking');
-        else {setBotType(tournamentOrder[updated.length]);setRound(1);setScreen('game');}
+        if (humanMatches.length === tournamentOrder.length) setScreen('ranking');
+        else {setBotType(tournamentOrder[humanMatches.length]);setRound(1);setScreen('game');}
       } else setScreen('final');
     }
     else setRound(round + 1);
@@ -162,7 +178,7 @@ function App() {
           <p role="status">{connection}</p>
         </div>
         <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>Đối thủ máy tính có cách chơi riêng. Hãy khám phá qua từng vòng.</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
-        <div className="choice-card"><h2>🏆 TOURNAMENT · 4 ĐỐI THỦ</h2><p>Đấu lần lượt với Nori, Pip, Rex và Kiko. Mỗi trận 10 vòng, cùng H={h}. Xếp hạng cuối theo lợi nhuận trung bình mỗi vòng.</p><button className="primary" onClick={()=>{setMode('tournament');setTournamentMatches([]);setBotType(tournamentOrder[0]);setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Bắt đầu Tournament</button></div>
+        <div className="choice-card"><h2>🏆 TOURNAMENT · 4 ĐỐI THỦ</h2><p>Vòng tròn 5 đối thủ: bạn đấu 4 bot (40 vòng), sau đó 6 trận bot-vs-bot chạy tự động. Mỗi trận 10 vòng, cùng H={h}. Xếp hạng theo tổng payoff.</p><button className="primary" onClick={()=>{setMode('tournament');setTournamentMatches([]);setBotType(tournamentOrder[0]);setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Bắt đầu Tournament</button></div>
         <div className="choice-card"><h2>LOCAL · ONE DEVICE</h2><p>Explore both firms on one device. This demo does not conceal choices from the person holding the device.</p>
           <button className="secondary" onClick={() => {setMode('local');setScreen('game');}}>Try local demo (H={h})</button>
         </div>
@@ -196,7 +212,16 @@ function App() {
       </div>}
       <p className="disclaimer">{mode === 'bot' || mode === 'tournament' ? 'Đối thủ là máy tính; chiến lược không được tiết lộ. Kết quả chỉ lưu tạm trong phiên chơi, chưa có database.' : mode === 'local' ? 'Local two-seat demonstration: both choices are made on this device.' : 'Online prototype: room state is held in server memory; restarting the backend ends the session.'}</p>
     </section>}
-    {screen === 'ranking' && <section className="story-screen"><div className="eyebrow">🏆 TOURNAMENT COMPLETE · H={h}</div><h1>Bảng xếp hạng cuối cùng</h1><p>4 trận · 10 vòng mỗi trận · Xếp hạng theo lợi nhuận trung bình mỗi vòng (không phải tổng lợi nhuận).</p><div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>Hạng</th><th>Đối thủ</th><th>Lợi nhuận / vòng</th><th>Tổng lợi nhuận</th><th>Số vòng</th></tr></thead><tbody>{tournamentRanking.map((entry,i)=><tr key={entry.name} className={entry.name==='Milo (Bạn)'?'ranking-human':''}><td>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td><td>{entry.name}</td><td><strong>{(entry.profit/entry.rounds).toFixed(2)}</strong></td><td>{fmt(entry.profit)}</td><td>{entry.rounds}</td></tr>)}</tbody></table></div><h2 className="history-title">Kết quả từng trận</h2><div className="history-list">{tournamentMatches.map((m,i)=><div className="history-row" key={m.bot}><span>Trận {i+1}</span><span>Milo vs {botNames[m.bot]} · {m.humanProfit>m.botProfit?'Thắng':m.humanProfit<m.botProfit?'Thua':'Hòa'}</span><strong>{fmt(m.humanProfit)} / {fmt(m.botProfit)}</strong></div>)}</div><p className="disclaimer">Đây là xếp hạng mô tả của 4 trận người-vs-bot, không phải giải vòng tròn giữa 5 người chơi. Kết quả chưa được lưu lâu dài.</p><button className="primary" onClick={reset}>Chơi giải mới ↻</button></section>}
+    {screen === 'ranking' && <section className="story-screen">
+      <div className="eyebrow">🏆 ROUND-ROBIN COMPLETE · H={h}</div><h1>Bảng xếp hạng cuối cùng</h1>
+      <p>5 đối thủ · 10 trận · 100 vòng đấu. Mỗi đối thủ chơi 4 trận (40 vòng). Xếp hạng theo <strong>tổng payoff</strong>.</p>
+      <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>Hạng</th><th>Đối thủ</th><th>Trận</th><th>Tổng payoff</th><th>Payoff/vòng</th></tr></thead><tbody>{tournamentRanking.map((entry,i)=><tr key={entry.id} className={entry.id==='human'?'ranking-human':''}><td>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td><td>{entry.name}</td><td>{entry.matches}</td><td><strong>{fmt(entry.profit)}</strong></td><td>{entry.rounds?(entry.profit/entry.rounds).toFixed(2):'—'}</td></tr>)}</tbody></table></div>
+      <h2 className="history-title">Ma trận tổng payoff đối đầu</h2><p>Mỗi ô là tổng payoff của đối thủ ở hàng khi gặp đối thủ ở cột (10 vòng).</p>
+      <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>Đối thủ</th>{participants.map(p=><th key={p}>{participantName(p)}</th>)}</tr></thead><tbody>{participants.map(p=><tr key={p} className={p==='human'?'ranking-human':''}><th>{participantName(p)}</th>{participants.map(q=>{const match=tournamentMatches.find(m=>(m.first===p&&m.second===q)||(m.first===q&&m.second===p));return <td key={q}>{p===q?'—':match?fmt(match.first===p?match.firstProfit:match.secondProfit):'—'}</td>})}</tr>)}</tbody></table></div>
+      <h2 className="history-title">Kết quả 10 trận</h2><div className="history-list">{tournamentMatches.map((m,i)=><div className="history-row" key={i}><span>Trận {i+1}</span><span>{participantName(m.first)} vs {participantName(m.second)}</span><strong>{fmt(m.firstProfit)} / {fmt(m.secondProfit)}</strong></div>)}</div>
+      <p className="disclaimer">Bot đấu tự động theo quy tắc riêng; không được xem lựa chọn hiện tại của đối thủ. Đây là kết quả một tournament, chưa có kiểm định độ ổn định theo seed. Dữ liệu chưa lưu trên server.</p>
+      <button className="primary" onClick={reset}>Chơi giải mới ↻</button>
+    </section>}
     {screen === 'final' && <section className="story-screen">
       <div className="eyebrow">FINAL RESULTS · WHAT DID YOU EARN?</div>{mode === "bot" && <p className="bot-banner">🤖 Trận đấu Người vs Bot · Luna: <strong>{botNames[botType]}</strong></p>}<h1>Every decision shapes the market.</h1><Garden moodA={totalA===totalB?'thinking':totalA>totalB?'smug':'furious'} moodB={totalA===totalB?'thinking':totalB>totalA?'smug':'furious'} />
       <div className="final-scores"><div><span>MILO</span><strong>{fmt(totalA)}</strong><small>cumulative profit</small></div><div><span>LUNA</span><strong>{fmt(totalB)}</strong><small>cumulative profit</small></div></div>
