@@ -4,3 +4,26 @@
 .choice-card input{display:block;margin:12px auto;padding:12px;border:2px solid #bed2b8;border-radius:10px;max-width:180px;width:100%;text-align:center;letter-spacing:3px;text-transform:uppercase}
 
 .payoff-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}.payoff-table th,.payoff-table td{padding:9px;border-bottom:1px solid #e7d9c0;text-align:left}.choice-card select{margin:10px;padding:9px;border:2px solid #bed2b8;border-radius:10px;background:white}.history-list{max-height:380px;overflow-y:auto}.final-scores>div{min-width:0;flex:1;max-width:250px}.final-scores strong{font-size:clamp(20px,4vw,34px);overflow-wrap:anywhere}
+
+/* Expressive reactions: smug winner, visibly frustrated loser. */
+.brow{position:absolute;top:24px;width:21px;height:5px;background:#593d30;border-radius:8px;z-index:3;transition:transform .2s}
+.left-brow{left:12px}.right-brow{right:12px}
+.cheek{position:absolute;top:47px;width:15px;height:8px;border-radius:50%;opacity:0;background:#dc6258}
+.left-cheek{left:6px}.right-cheek{right:6px}
+.character.smug .left-brow{transform:translateY(-7px) rotate(-17deg)}
+.character.smug .right-brow{transform:translateY(3px) rotate(12deg)}
+.character.smug .eye{height:4px;top:36px;transform:rotate(-15deg)}
+.character.smug .mouth{left:26px;top:47px;width:26px;height:13px;border-bottom:5px solid #6c332e;border-radius:0 0 75% 55%;transform:rotate(-10deg)}
+.character.smug .cheek{opacity:.55}
+.character.smug .hat{transform:rotate(-9deg)}
+.character.smug{animation:smug-bob 1.1s ease-in-out infinite}
+.character.furious .left-brow{transform:translateY(2px) rotate(25deg)}
+.character.furious .right-brow{transform:translateY(2px) rotate(-25deg)}
+.character.furious .eye{height:11px;width:6px;top:33px}
+.character.furious .mouth{left:26px;top:55px;width:24px;height:13px;border:4px solid #69332b;background:#a94a49;border-radius:35% 35% 65% 65%;transform:rotate(180deg)}
+.character.furious .cheek{opacity:.9}
+.character.furious .face{background:#df947f}
+.character.furious{animation:angry-shake .22s ease-in-out infinite}
+@keyframes smug-bob{50%{transform:translateY(-9px) rotate(3deg)}}
+@keyframes angry-shake{0%,100%{transform:translateX(-2px) rotate(-2deg)}50%{transform:translateX(2px) rotate(2deg)}}
+@media(prefers-reduced-motion:reduce){.character.smug,.character.furious{animation:none}}
