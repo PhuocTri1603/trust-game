@@ -5,9 +5,9 @@ import './style.css';
 type Choice = 'C' | 'D';
 type Screen = 'intro' | 'tutorial' | 'lobby' | 'game' | 'final';
 type Turn = { round: number; a: Choice; b: Choice; pa: number; pb: number };
-const payoff = (a:Choice,b:Choice,h:number):[number,number] => { const x=Number(a==='D'),y=Number(b==='D'); return [h*(8+2*x-y)**2/9-10*x,h*(8+2*y-x)**2/9-10*y]; };
-const fmt=(n:number)=>n.toFixed(2);
-const MAX_ROUNDS = 200;
+const payoff = (a:Choice,b:Choice,h:number):[number,number] => { const x=Number(a==='D'),y=Number(b==='D'); return [Math.round(h*(8+2*x-y)**2/9-10*x),Math.round(h*(8+2*y-x)**2/9-10*y)]; };
+const fmt=(n:number)=>n.toFixed(0);
+const MAX_ROUNDS = 10;
 const label = (c: Choice) => c === 'C' ? 'No AI' : 'Subscribe to AI';
 
 function Character({ side, mood = 'happy' }: { side: 'a' | 'b'; mood?: 'happy' | 'sad' | 'thinking' }) {
@@ -117,15 +117,15 @@ function App() {
       <div className="dialogue"><span className="speaker">THE STORYTELLER · {tutorial + 1} OF 3</span>
         {tutorial === 0 && <p><strong>No AI (C)</strong> means no subscription fee. <strong>AI subscription (D)</strong> reduces marginal cost by d = 1 but costs F = 10 each decision round.</p>}
         {tutorial === 1 && <p><strong>Cournot competition</strong>: the two firms compete in one market. Each move represents H operating periods. Profit is calculated from both AI decisions using the model in the paper.</p>}
-        {tutorial === 2 && <p>Play <strong>200 rounds</strong> with H fixed throughout the match. Decisions are simultaneous and hidden until both players submit. Your cumulative profit depends on the whole interaction history.</p>}
+        {tutorial === 2 && <p>Play <strong>10 rounds</strong> with H fixed throughout the match. Decisions are simultaneous and hidden until both players submit. Your cumulative profit depends on the whole interaction history.</p>}
       </div>
       <div className="dots" aria-label="Tutorial progress">{[0, 1, 2].map(i => <span key={i} className={i === tutorial ? 'active' : ''} />)}</div>
       <div className="actions"><button className="secondary" onClick={() => tutorial === 0 ? setScreen('intro') : setTutorial(tutorial - 1)}>← Back</button><button className="primary" onClick={() => tutorial === 2 ? setScreen('lobby') : setTutorial(tutorial + 1)}>{tutorial === 2 ? 'Enter the market' : 'Continue'} →</button></div>
     </section>}
     {screen === 'lobby' && <section className="story-screen">
       <div className="eyebrow">CHAPTER THREE · INVITE A FRIEND</div><h1>Every market needs two firms.</h1><Garden />
-      <div className="dialogue"><span className="speaker">CHOOSE HOW TO PLAY</span><p>Both firms join from separate devices. The host selects H (1–6) before creating the room. The same H applies to all 200 rounds.</p></div>
-      <div className="dialogue"><span className="speaker">PAYOFF MATRIX · H={h}</span><table className="payoff-table"><thead><tr><th>Milo / Luna</th><th>No AI</th><th>AI</th></tr></thead><tbody>{([["C","C"],["C","D"],["D","C"],["D","D"]] as Choice[][]).filter((_,i)=>i===0||i===1||i===2||i===3).map(([x,y],i)=><tr key={i}><th>{label(x)} / {label(y)}</th><td colSpan={2}>{fmt(payoff(x,y,h)[0])} / {fmt(payoff(x,y,h)[1])}</td></tr>)}</tbody></table><p>Payoffs shown as Milo / Luna. H={h}, m=8, d=1, F=10. Negative payoffs are possible.</p></div><div className="choice-grid">
+      <div className="dialogue"><span className="speaker">CHOOSE HOW TO PLAY</span><p>Both firms join from separate devices. The host selects H (1–6) before creating the room. The same H applies to all 10 rounds.</p></div>
+      <div className="dialogue"><span className="speaker">PAYOFF MATRIX · H={h}</span><table className="payoff-table"><thead><tr><th>Milo / Luna</th><th>No AI</th><th>AI</th></tr></thead><tbody>{([["C","C"],["C","D"],["D","C"],["D","D"]] as Choice[][]).filter((_,i)=>i===0||i===1||i===2||i===3).map(([x,y],i)=><tr key={i}><th>{label(x)} / {label(y)}</th><td colSpan={2}>{fmt(payoff(x,y,h)[0])} / {fmt(payoff(x,y,h)[1])}</td></tr>)}</tbody></table><p>Payoffs shown as Milo / Luna. H={h}, m=8, d=1, F=10. Payoffs are rounded to whole numbers each round. Negative payoffs are possible.</p></div><div className="choice-grid">
         <div className="choice-card"><h2>ONLINE · TWO DEVICES</h2><label htmlFor="h-select">AI benefit horizon H: </label><select id="h-select" value={h} disabled={!!session} onChange={e=>setH(Number(e.target.value))}>{[1,2,3,4,5,6].map(v=><option key={v} value={v}>{v}</option>)}</select><button className="primary" onClick={createRoom}>Create private room</button>
           <p>Or join your friend's room:</p><input aria-label="Room code" placeholder="ROOM CODE" maxLength={6} value={invite} onChange={e=>setInvite(e.target.value)} />
           <button className="secondary" onClick={joinRoom}>Join room</button>
@@ -142,7 +142,7 @@ function App() {
       <div className="eyebrow">CHAPTER FOUR · AI COMPETITION</div>
       <div className="game-heading"><h1>Will your firm subscribe to AI?</h1><span className="round-pill">ROUND {round} / {MAX_ROUNDS} · H={h}</span></div>
       <Garden moodA={revealed && a === 'C' && b === 'D' ? 'sad' : 'thinking'} moodB={revealed && a === 'D' && b === 'C' ? 'sad' : 'thinking'} />
-      <div className="scoreboard"><div>MILO <strong>{totalA}</strong> profit</div><div>LUNA <strong>{totalB}</strong> profit</div></div>
+      <div className="scoreboard"><div>MILO <strong>{fmt(totalA)}</strong> profit</div><div>LUNA <strong>{fmt(totalB)}</strong> profit</div></div>
       {mode === 'online' ? <div className="choice-card">
         <h2>YOU ARE {session?.seat === 'A' ? 'MILO' : 'LUNA'} · {connection}</h2>
         <p>{submitted ? 'Choice locked. Waiting for the other firm…' : 'Your AI subscription decision remains hidden until both firms have decided.'}</p>
@@ -152,7 +152,7 @@ function App() {
       </div> : !revealed ? <div className="choice-grid">
         {([{ who: 'MILO', value: a, setter: setA }, { who: 'LUNA', value: b, setter: setB }] as const).map(player => <div className="choice-card" key={player.who}>
           <h2>{player.who}'S TURN</h2><p>{player.value ? 'Choice locked. Waiting for the other firm.' : 'Choose whether this firm subscribes to AI.'}</p>
-          <div className="choice-buttons"><button disabled={player.value !== null} onClick={() => player.setter('C')}>🌱 Share</button><button disabled={player.value !== null} onClick={() => player.setter('D')}>🧺 Keep</button></div>
+          <div className="choice-buttons"><button disabled={player.value !== null} onClick={() => player.setter('C')}>🏭 No AI</button><button disabled={player.value !== null} onClick={() => player.setter('D')}>🤖 Subscribe to AI</button></div>
           <span className="choice-status">{player.value ? '✓ Choice submitted' : '○ Waiting for choice'}</span>
         </div>)}
       </div> : <div className="reveal" aria-live="polite">
@@ -167,7 +167,7 @@ function App() {
       <div className="eyebrow">FINAL RESULTS · WHAT DID YOU EARN?</div><h1>Every decision shapes the market.</h1><Garden />
       <div className="final-scores"><div><span>MILO</span><strong>{fmt(totalA)}</strong><small>cumulative profit</small></div><div><span>LUNA</span><strong>{fmt(totalB)}</strong><small>cumulative profit</small></div></div>
       <div className="dialogue"><span className="speaker">THE STORYTELLER</span><p>Over {MAX_ROUNDS} rounds at H={h}, neither firm subscribed in {cooperation} rounds. Milo subscribed in {visibleHistory.filter(t=>t.a==='D').length} rounds and Luna in {visibleHistory.filter(t=>t.b==='D').length}. These are descriptive outcomes, not evidence of an optimal strategy.</p></div>
-      <h2 className="history-title">All 200 rounds</h2>
+      <h2 className="history-title">All 10 rounds</h2>
       <div className="history-list">{visibleHistory.map(t => <div className="history-row" key={t.round}><span>Round {t.round}</span><span>{label(t.a)} / {label(t.b)}</span><strong>{fmt(t.pa)} / {fmt(t.pb)}</strong></div>)}</div>
       <button className="primary" onClick={reset}>Start another match ↻</button>
     </section>}
