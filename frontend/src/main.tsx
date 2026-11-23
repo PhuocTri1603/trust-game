@@ -4,7 +4,7 @@ import './style.css';
 
 type Choice = 'C' | 'D';
 type BotType = 'random' | 'cooperate' | 'defect' | 'tit_for_tat';
-const botNames:Record<BotType,string> = {random:'Random Bot',cooperate:'Always Cooperate',defect:'Always Defect',tit_for_tat:'Tit-for-Tat'};
+const botNames:Record<BotType,string> = {random:'Nori',cooperate:'Pip',defect:'Rex',tit_for_tat:'Kiko'};
 const botDescriptions:Record<BotType,string> = {random:'Chọn Đồng lòng hoặc Âm thầm ngẫu nhiên, xác suất 50/50.',cooperate:'Luôn chọn Đồng lòng.',defect:'Luôn chọn Âm thầm.',tit_for_tat:'Vòng đầu Đồng lòng; từ vòng 2 lặp lại lựa chọn của bạn ở vòng trước.'};
 const botChoice = (type:BotType,history:Turn[]):Choice => type === 'cooperate' ? 'C' : type === 'defect' ? 'D' : type === 'tit_for_tat' ? (history.length ? history[history.length-1].a : 'C') : (Math.random() < 0.5 ? 'C' : 'D');
 type Screen = 'intro' | 'tutorial' | 'lobby' | 'game' | 'final';
@@ -146,7 +146,7 @@ function App() {
           {session && <p><strong>Room {session.code}</strong> · H={h} · Seat {session.seat} · {players}/2 players</p>}
           <p role="status">{connection}</p>
         </div>
-        <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>{botDescriptions[botType]}</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
+        <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>Đối thủ máy tính có cách chơi riêng. Hãy khám phá qua từng vòng.</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
         <div className="choice-card"><h2>LOCAL · ONE DEVICE</h2><p>Explore both firms on one device. This demo does not conceal choices from the person holding the device.</p>
           <button className="secondary" onClick={() => {setMode('local');setScreen('game');}}>Try local demo (H={h})</button>
         </div>
@@ -156,7 +156,7 @@ function App() {
     {screen === 'game' && <section className="story-screen">
       <div className="eyebrow">CHAPTER FOUR · AI COMPETITION</div>
       <div className="game-heading"><h1>Đồng lòng hay Âm thầm?</h1><span className="round-pill">ROUND {round} / {MAX_ROUNDS} · H={h}</span></div>
-      {mode === "bot" && <p className="bot-banner">🤖 Bạn là Milo · Đối thủ Luna: <strong>{botNames[botType]}</strong> · {botDescriptions[botType]}</p>}
+      {mode === "bot" && <p className="bot-banner">🤖 Bạn là Milo · Đối thủ Luna: <strong>{botNames[botType]}</strong></p>}
       <Garden moodA={moodFor(0)} moodB={moodFor(1)} />
       <div className="scoreboard"><div>MILO <strong>{fmt(totalA)}</strong> profit</div><div>LUNA <strong>{fmt(totalB)}</strong> profit</div></div>
       {mode === 'online' ? <div className="choice-card">
@@ -165,7 +165,7 @@ function App() {
         <div className="choice-buttons"><button disabled={submitted || players < 2} onClick={()=>onlineChoose('C')}>🤝 Đồng lòng</button><button disabled={submitted || players < 2} onClick={()=>onlineChoose('D')}>🤫 Âm thầm</button></div>
         <p>{players}/2 players connected to room {session?.code}</p>
         {onlineHistory.length > 0 && <p>Last round: Milo {label(onlineHistory[onlineHistory.length-1].a)}, Luna {label(onlineHistory[onlineHistory.length-1].b)} · {fmt(onlineHistory[onlineHistory.length-1].pa)} / {fmt(onlineHistory[onlineHistory.length-1].pb)}</p>}
-      </div> : mode === 'bot' && !revealed ? <div className="choice-card"><h2>MILO · LƯỢT CỦA BẠN</h2><p>Đối thủ là bot {botNames[botType]}. Bot sẽ quyết định khi bạn chọn, và cả hai lựa chọn được công bố cùng lúc.</p><div className="choice-buttons"><button onClick={()=>chooseAgainstBot('C')}>🤝 Đồng lòng</button><button onClick={()=>chooseAgainstBot('D')}>🤫 Âm thầm</button></div></div> : !revealed ? <div className="choice-grid">
+      </div> : mode === 'bot' && !revealed ? <div className="choice-card"><h2>MILO · LƯỢT CỦA BẠN</h2><p>Bạn đang đấu với {botNames[botType]}, một đối thủ máy tính. Cả hai lựa chọn được công bố cùng lúc.</p><div className="choice-buttons"><button onClick={()=>chooseAgainstBot('C')}>🤝 Đồng lòng</button><button onClick={()=>chooseAgainstBot('D')}>🤫 Âm thầm</button></div></div> : !revealed ? <div className="choice-grid">
         {([{ who: 'MILO', value: a, setter: setA }, { who: 'LUNA', value: b, setter: setB }] as const).map(player => <div className="choice-card" key={player.who}>
           <h2>{player.who}'S TURN</h2><p>{player.value ? 'Choice locked. Waiting for the other firm.' : 'Chọn Đồng lòng hoặc Âm thầm.'}</p>
           <div className="choice-buttons"><button disabled={player.value !== null} onClick={() => player.setter('C')}>🤝 Đồng lòng</button><button disabled={player.value !== null} onClick={() => player.setter('D')}>🤫 Âm thầm</button></div>
