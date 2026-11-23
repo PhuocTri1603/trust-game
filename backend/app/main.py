@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from .game_engine import payoff, ROUNDS
+from .game_engine import payoff, matrix, validate_h, ROUNDS, M, D, F
 
 app = FastAPI(title="Trust Garden API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "https://phuoctri1603.github.io"], allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
@@ -15,6 +15,7 @@ ALPHABET = string.ascii_uppercase + string.digits
 @dataclass
 class Room:
     code: str
+    h: int = 3
     tokens: dict = field(default_factory=dict)
     clients: dict = field(default_factory=dict)
     choices: dict = field(default_factory=dict)
@@ -24,13 +25,16 @@ class Room:
 
 rooms: dict[str, Room] = {}
 
+class CreateRequest(BaseModel):
+    h: int = 3
+
 class JoinRequest(BaseModel):
     code: str
 
 def state(room: Room, seat: str) -> dict:
     scores = [sum(t["points"][i] for t in room.history) for i in (0, 1)]
     return {"type": "room.state", "code": room.code, "seat": seat, "players": len(room.tokens),
-            "round": room.round, "total_rounds": ROUNDS, "submitted": seat in room.choices,
+            "round": room.round, "total_rounds": ROUNDS, "h": room.h, "m": M, "d": D, "f": F, "payoff_matrix": matrix(room.h), "submitted": seat in room.choices,
             "opponent_submitted": ("B" if seat == "A" else "A") in room.choices,
             "scores": scores, "history": room.history,
             "finished": len(room.history) == ROUNDS}
@@ -47,14 +51,18 @@ def health():
     return {"status": "ok", "multiplayer_ready": True, "storage": "in_memory"}
 
 @app.post("/rooms")
-def create_room():
+def create_room(request: CreateRequest = CreateRequest()):
+    try:
+        validate_h(request.h)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     code = "".join(secrets.choice(ALPHABET) for _ in range(6))
     while code in rooms:
         code = "".join(secrets.choice(ALPHABET) for _ in range(6))
     token = secrets.token_urlsafe(32)
-    room = Room(code=code, tokens={"A": token})
+    room = Room(code=code, h=request.h, tokens={"A": token})
     rooms[code] = room
-    return {"code": code, "seat": "A", "token": token}
+    return {"code": code, "seat": "A", "token": token, "h": room.h}
 
 @app.post("/rooms/join")
 def join_room(request: JoinRequest):
@@ -65,7 +73,7 @@ def join_room(request: JoinRequest):
         raise HTTPException(409, "Room full")
     token = secrets.token_urlsafe(32)
     room.tokens["B"] = token
-    return {"code": room.code, "seat": "B", "token": token}
+    return {"code": room.code, "seat": "B", "token": token, "h": room.h}
 
 @app.websocket("/ws/{code}")
 async def game_socket(ws: WebSocket, code: str):
@@ -99,7 +107,7 @@ async def game_socket(ws: WebSocket, code: str):
                 await ws.send_json({"type": "action.ack", "accepted": True, "round": room.round})
                 if len(room.choices) == 2:
                     a, b = room.choices["A"], room.choices["B"]
-                    points = list(payoff(a, b))
+                    points = list(payoff(a, b, room.h))
                     result = {"round": room.round, "a": a, "b": b, "points": points}
                     room.history.append(result)
                     room.choices.clear()
