@@ -21,6 +21,7 @@ class Room:
     choices: dict = field(default_factory=dict)
     history: list = field(default_factory=list)
     round: int = 1
+    rematch_votes: set = field(default_factory=set)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 rooms: dict[str, Room] = {}
@@ -33,7 +34,7 @@ class JoinRequest(BaseModel):
 
 def state(room: Room, seat: str) -> dict:
     scores = [sum(t["points"][i] for t in room.history) for i in (0, 1)]
-    return {"type": "room.state", "code": room.code, "seat": seat, "players": len(room.tokens),
+    return {"type": "room.state", "code": room.code, "seat": seat, "players": len(room.tokens), "connected": len(room.clients), "rematch_votes": len(room.rematch_votes),
             "round": room.round, "total_rounds": ROUNDS, "h": room.h, "m": M, "d": D, "f": F, "payoff_matrix": matrix(room.h), "submitted": seat in room.choices,
             "opponent_submitted": ("B" if seat == "A" else "A") in room.choices,
             "scores": scores, "history": room.history,
@@ -85,19 +86,32 @@ async def game_socket(ws: WebSocket, code: str):
         return
     await ws.accept()
     old = room.clients.get(seat)
+    room.clients[seat] = ws
     if old:
         await old.close(code=4000)
-    room.clients[seat] = ws
     await send_state(room)
     try:
         while True:
             msg = await ws.receive_json()
+            if msg.get("type") == "match.rematch":
+                async with room.lock:
+                    if len(room.history) != ROUNDS or len(room.tokens) != 2:
+                        await ws.send_json({"type": "error", "message": "Finish the match before rematching"})
+                        continue
+                    room.rematch_votes.add(seat)
+                    if len(room.rematch_votes) == 2:
+                        room.history.clear()
+                        room.choices.clear()
+                        room.round = 1
+                        room.rematch_votes.clear()
+                    await send_state(room)
+                continue
             if msg.get("type") != "action.submit":
                 await ws.send_json({"type": "error", "message": "Unknown event"})
                 continue
             async with room.lock:
                 action = msg.get("action")
-                if action not in ("C", "D") or msg.get("round_number") != room.round or len(room.tokens) < 2 or len(room.history) == ROUNDS:
+                if action not in ("C", "D") or msg.get("round_number") != room.round or len(room.clients) < 2 or len(room.history) == ROUNDS:
                     await ws.send_json({"type": "error", "message": "Invalid action or round"})
                     continue
                 if seat in room.choices:
