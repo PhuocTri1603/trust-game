@@ -46,7 +46,43 @@ function Garden({ moodA, moodB }: { moodA?: 'happy' | 'sad' | 'thinking' | 'smug
   </div>;
 }
 
+type SavedMatch = { id:string; date:string; opponent:string; result:'Thắng'|'Thua'|'Hòa'; myProfit:number; theirProfit:number; h:number };
+type PlayerProfile = { name:string; xp:number; matches:SavedMatch[]; quests:{day:string; played:number; wins:number; rematches:number} };
+const STORAGE_KEY='trust-garden-player-v1';
+const todayKey=()=>new Date().toLocaleDateString('en-CA');
+const initialProfile=():PlayerProfile=>({name:'Milo',xp:0,matches:[],quests:{day:todayKey(),played:0,wins:0,rematches:0}});
+const loadProfile=():PlayerProfile=>{
+  try {
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw)return initialProfile();
+    const value=JSON.parse(raw);
+    if(typeof value.name!=='string'||typeof value.xp!=='number'||!Array.isArray(value.matches)||!value.quests)return initialProfile();
+    return {...value,name:value.name.slice(0,20),matches:value.matches.slice(0,10)};
+  }catch{return initialProfile();}
+};
 function App() {
+  const [profile,setProfile]=useState<PlayerProfile>(loadProfile);
+  const [recordedMatch,setRecordedMatch]=useState(false);
+  const [isRematch,setIsRematch]=useState(false);
+  const day=todayKey();
+  const quests=profile.quests.day===day?profile.quests:{day,played:0,wins:0,rematches:0};
+  const level=Math.floor(profile.xp/100)+1;
+  const updateProfile=(fn:(current:PlayerProfile)=>PlayerProfile)=>setProfile(current=>{
+    const next=fn(current);
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next));}catch{/* storage disabled */}
+    return next;
+  });
+  const saveResult=(opponent:string,myProfit:number,theirProfit:number)=>{
+    if(recordedMatch)return;
+    const result=myProfit>theirProfit?'Thắng':myProfit<theirProfit?'Thua':'Hòa';
+    updateProfile(current=>{
+      const q=current.quests.day===todayKey()?current.quests:{day:todayKey(),played:0,wins:0,rematches:0};
+      const nextQ={...q,played:q.played+1,wins:q.wins+(result==='Thắng'?1:0),rematches:q.rematches+(isRematch?1:0)};
+      const bonus=[q.played<1, q.wins<1&&result==='Thắng',q.rematches<1&&isRematch].filter(Boolean).length*15;
+      return {...current,xp:current.xp+20+bonus,quests:nextQ,matches:[{id:crypto.randomUUID(),date:new Date().toISOString(),opponent,result,myProfit,theirProfit,h},...current.matches].slice(0,10)};
+    });
+    setRecordedMatch(true);
+  };
   const [screen, setScreen] = useState<Screen>('intro');
   const [mode, setMode] = useState<'local' | 'online' | 'bot' | 'tournament'>('local');
   const [invite, setInvite] = useState('');
@@ -124,7 +160,7 @@ function App() {
   const reset = () => { socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setTournamentMatches([]); setH(3); };
   const rematch = () => {
     if (mode === 'online') return;
-    setA(null); setB(null); setHistory([]); setRound(1);
+    setA(null); setB(null); setHistory([]); setRound(1); setRecordedMatch(false); setIsRematch(true);
     if (mode === 'tournament') { setTournamentMatches([]); setBotType(tournamentOrder[0]); }
     setScreen('game');
   };
@@ -139,12 +175,19 @@ function App() {
     const next = [...history, { round, a, b, pa: scores[0], pb: scores[1] }];
     setHistory(next); setA(null); setB(null);
     if (round === MAX_ROUNDS) {
+      if (mode === 'bot' || mode === 'local') saveResult(mode==='bot'?botNames[botType]:'Local',next.reduce((sum,t)=>sum+t.pa,0),next.reduce((sum,t)=>sum+t.pb,0));
       if (mode === 'tournament') {
         const completed:MatchResult = {first:'human',second:botType,turns:next,firstProfit:next.reduce((sum,t)=>sum+t.pa,0),secondProfit:next.reduce((sum,t)=>sum+t.pb,0)};
         const humanMatches=[...tournamentMatches,completed];
         const updated=humanMatches.length===tournamentOrder.length ? [...humanMatches,...tournamentOrder.flatMap((first,i)=>tournamentOrder.slice(i+1).map(second=>simulateBotMatch(first,second,h)))] : humanMatches;
         setTournamentMatches(updated);
-        if (humanMatches.length === tournamentOrder.length) setScreen('ranking');
+        if (humanMatches.length === tournamentOrder.length) {
+          const mine=updated.filter(m=>m.first==='human').reduce((sum,m)=>sum+m.firstProfit,0);
+          const others=updated.filter(m=>m.second==='human').reduce((sum,m)=>sum+m.secondProfit,0);
+          // Tournament progress counts once, not once per bot match.
+          saveResult('Tournament',mine,others);
+          setScreen('ranking');
+        }
         else {setBotType(tournamentOrder[humanMatches.length]);setHistory([]);setRound(1);setScreen('game');}
       } else setScreen('final');
     }
@@ -154,6 +197,20 @@ function App() {
   return <main className="app-shell">
     <header className="topbar"><span className="brand">⚙ THE TRUST GARDEN · AI COMPETITION</span><span className="edition">AN AXELROD–COURNOT EXPERIMENT</span></header>
     {screen === 'intro' && <section className="story-screen">
+      <div className="choice-card" style={{maxWidth:650,margin:'0 auto 18px'}}>
+        <h2>🌱 HỒ SƠ NGƯỜI CHƠI · CẤP {level}</h2>
+        <label htmlFor="player-name">Tên hiển thị: </label>
+        <input id="player-name" aria-label="Tên người chơi" style={{letterSpacing:0,textTransform:'none'}} maxLength={20} value={profile.name} onChange={e=>updateProfile(p=>({...p,name:e.target.value.slice(0,20)}))}/>
+        <p>⭐ {profile.xp} XP · {profile.xp%100}/100 XP để lên cấp tiếp theo</p>
+        <h2>🎯 NHIỆM VỤ HÔM NAY</h2>
+        <p>{quests.played>=1?'✅':'⬜'} Hoàn thành 1 trận · +15 XP</p>
+        <p>{quests.wins>=1?'✅':'⬜'} Thắng 1 trận · +15 XP</p>
+        <p>{quests.rematches>=1?'✅':'⬜'} Chơi Rematch · +15 XP</p>
+        <p>Mỗi trận hoàn thành: +20 XP. Nhiệm vụ làm mới theo ngày trên thiết bị.</p>
+        <h2>📜 10 TRẬN GẦN NHẤT</h2>
+        {profile.matches.length===0?<p>Chưa có trận nào được lưu.</p>:<div className="history-list">{profile.matches.map(m=><div className="history-row" key={m.id}><span>{m.result}</span><span>{m.opponent} · H={m.h}</span><strong>{m.myProfit}/{m.theirProfit}</strong></div>)}</div>}
+        <p className="disclaimer">Dữ liệu chỉ lưu trên trình duyệt này; xóa dữ liệu trình duyệt sẽ mất tiến độ. PvP chưa cộng XP.</p>
+      </div>
       <div className="eyebrow">CHAPTER ONE · TWO FIRMS</div>
       <h1>Two firms. One market. Your decision.</h1>
       <Garden />
@@ -183,10 +240,10 @@ function App() {
           {session && <p><strong>Room {session.code}</strong> · H={h} · Seat {session.seat} · {players}/2 players</p>}
           <p role="status">{connection}</p>
         </div>
-        <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>Đối thủ máy tính có cách chơi riêng. Hãy khám phá qua từng vòng.</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
-        <div className="choice-card"><h2>🏆 TOURNAMENT · 4 ĐỐI THỦ</h2><p>Vòng tròn 5 đối thủ: bạn đấu 4 bot (40 vòng), sau đó 6 trận bot-vs-bot chạy tự động. Mỗi trận 10 vòng, cùng H={h}. Xếp hạng theo tổng payoff.</p><button className="primary" onClick={()=>{setMode('tournament');setTournamentMatches([]);setBotType(tournamentOrder[0]);setA(null);setB(null);setHistory([]);setRound(1);setScreen('game');}}>Bắt đầu Tournament</button></div>
+        <div className="choice-card"><h2>🤖 NGƯỜI VS BOT</h2><p>Bạn điều khiển Milo. Luna là bot và được công khai loại chiến lược trước trận.</p><label htmlFor="bot-select">Chọn đối thủ: </label><select id="bot-select" value={botType} onChange={e=>setBotType(e.target.value as BotType)}>{(Object.keys(botNames) as BotType[]).map(type=><option key={type} value={type}>{botNames[type]}</option>)}</select><p>Đối thủ máy tính có cách chơi riêng. Hãy khám phá qua từng vòng.</p><button className="primary" onClick={()=>{setMode('bot');setA(null);setB(null);setHistory([]);setRound(1);setRecordedMatch(false);setIsRematch(false);setScreen('game');}}>Đấu với {botNames[botType]} (H={h})</button></div>
+        <div className="choice-card"><h2>🏆 TOURNAMENT · 4 ĐỐI THỦ</h2><p>Vòng tròn 5 đối thủ: bạn đấu 4 bot (40 vòng), sau đó 6 trận bot-vs-bot chạy tự động. Mỗi trận 10 vòng, cùng H={h}. Xếp hạng theo tổng payoff.</p><button className="primary" onClick={()=>{setMode('tournament');setTournamentMatches([]);setBotType(tournamentOrder[0]);setA(null);setB(null);setHistory([]);setRound(1);setRecordedMatch(false);setIsRematch(false);setScreen('game');}}>Bắt đầu Tournament</button></div>
         <div className="choice-card"><h2>LOCAL · ONE DEVICE</h2><p>Explore both firms on one device. This demo does not conceal choices from the person holding the device.</p>
-          <button className="secondary" onClick={() => {setMode('local');setScreen('game');}}>Try local demo (H={h})</button>
+          <button className="secondary" onClick={() => {setMode('local');setA(null);setB(null);setHistory([]);setRound(1);setRecordedMatch(false);setIsRematch(false);setScreen('game');}}>Try local demo (H={h})</button>
         </div>
       </div>
       {session && <p>Share code <strong>{session.code}</strong> with your friend. The game begins automatically when both join.</p>}
@@ -230,6 +287,7 @@ function App() {
     </section>}
     {screen === 'final' && <section className="story-screen">
       <div className="eyebrow">FINAL RESULTS · WHAT DID YOU EARN?</div>{mode === "bot" && <p className="bot-banner">🤖 Trận đấu Người vs Bot · Luna: <strong>{botNames[botType]}</strong></p>}<h1>{totalA === totalB ? '🤝 Hòa! Một trận đấu cân sức.' : totalA > totalB ? '🏆 Milo chiến thắng!' : '🌱 Milo chưa thắng lần này!'}</h1><p>{totalA === totalB ? 'Hai bên có cùng tổng lợi nhuận. Bạn có thể thử chiến lược khác.' : totalA > totalB ? 'Bạn đã vượt đối thủ về tổng lợi nhuận. Bạn có thể giữ vững thành tích không?' : 'Đối thủ đạt lợi nhuận cao hơn. Hãy thử một cách chơi khác trong trận tái đấu.'}</p><Garden moodA={totalA===totalB?'thinking':totalA>totalB?'smug':'furious'} moodB={totalA===totalB?'thinking':totalB>totalA?'smug':'furious'} />
+      {mode!=='online'&&<p className="bot-banner">⭐ +20 XP mỗi trận · nhiệm vụ hằng ngày thưởng thêm +15 XP khi hoàn thành lần đầu.</p>}
       <div className="final-scores"><div><span>MILO</span><strong>{fmt(totalA)}</strong><small>cumulative profit</small></div><div><span>LUNA</span><strong>{fmt(totalB)}</strong><small>cumulative profit</small></div></div>
       <div className="dialogue"><span className="speaker">THE STORYTELLER</span><p>Over {MAX_ROUNDS} rounds at H={h}, neither firm subscribed in {cooperation} rounds. Milo subscribed in {visibleHistory.filter(t=>t.a==='D').length} rounds and Luna in {visibleHistory.filter(t=>t.b==='D').length}. These are descriptive outcomes, not evidence of an optimal strategy.</p></div>
       <h2 className="history-title">All 10 rounds</h2>
