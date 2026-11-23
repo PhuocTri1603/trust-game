@@ -74,7 +74,7 @@ function App() {
   });
   const saveResult=(opponent:string,myProfit:number,theirProfit:number)=>{
     if(recordedMatch)return;
-    const result=myProfit>theirProfit?'Thắng':myProfit<theirProfit?'Thua':'Hòa';
+    const result:SavedMatch['result']=myProfit>theirProfit?'Thắng':myProfit<theirProfit?'Thua':'Hòa';
     updateProfile(current=>{
       const q=current.quests.day===todayKey()?current.quests:{day:todayKey(),played:0,wins:0,rematches:0};
       const nextQ={...q,played:q.played+1,wins:q.wins+(result==='Thắng'?1:0),rematches:q.rematches+(isRematch?1:0)};
