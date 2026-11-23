@@ -25,6 +25,8 @@ class Room:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 rooms: dict[str, Room] = {}
+matchmaking_lock = asyncio.Lock()
+
 
 class CreateRequest(BaseModel):
     h: int = 3
@@ -64,6 +66,26 @@ def create_room(request: CreateRequest = CreateRequest()):
     room = Room(code=code, h=request.h, tokens={"A": token})
     rooms[code] = room
     return {"code": code, "seat": "A", "token": token, "h": room.h}
+
+@app.post("/matchmaking/join")
+async def matchmaking_join(request: CreateRequest = CreateRequest()):
+    """Match two guests at the same H; room tokens remain private."""
+    try:
+        validate_h(request.h)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    async with matchmaking_lock:
+        for room in rooms.values():
+            if room.h == request.h and len(room.tokens) == 1 and not room.history:
+                token = secrets.token_urlsafe(32)
+                room.tokens["B"] = token
+                return {"code": room.code, "seat": "B", "token": token, "h": room.h}
+        code = "".join(secrets.choice(ALPHABET) for _ in range(6))
+        while code in rooms:
+            code = "".join(secrets.choice(ALPHABET) for _ in range(6))
+        token = secrets.token_urlsafe(32)
+        rooms[code] = Room(code=code, h=request.h, tokens={"A": token})
+        return {"code": code, "seat": "A", "token": token, "h": request.h}
 
 @app.post("/rooms/join")
 def join_room(request: JoinRequest):
