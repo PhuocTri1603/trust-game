@@ -17,7 +17,8 @@ const simulateBotMatch=(first:BotType,second:BotType,h:number):MatchResult=>{
   for(let round=1;round<=MAX_ROUNDS;round++){
     const firstHistory=turns;
     const secondHistory=turns.map(t=>({...t,a:t.b,b:t.a,pa:t.pb,pb:t.pa}));
-    const a=botChoice(first,firstHistory),b=botChoice(second,secondHistory);
+    const a=first==='tit_for_tat' ? (turns.length?turns[turns.length-1].b:'C') : botChoice(first,firstHistory);
+    const b=botChoice(second,secondHistory);
     const [pa,pb]=payoff(a,b,h);
     turns.push({round,a,b,pa,pb});
   }
