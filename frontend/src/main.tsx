@@ -122,6 +122,12 @@ function App() {
   const cooperation = visibleHistory.filter(t => t.a === 'C' && t.b === 'C').length;
   const resultStory = a === 'C' && b === 'C' ? 'Cả hai chọn Đồng lòng (không dùng AI).' : a === 'D' && b === 'D' ? 'Cả hai chọn Âm thầm (đăng ký AI và trả phí).' : 'Hai bên đưa ra lựa chọn khác nhau. Lợi nhuận được tính theo mô hình Cournot.';
   const reset = () => { socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setTournamentMatches([]); setH(3); };
+  const rematch = () => {
+    if (mode === 'online') return;
+    setA(null); setB(null); setHistory([]); setRound(1);
+    if (mode === 'tournament') { setTournamentMatches([]); setBotType(tournamentOrder[0]); }
+    setScreen('game');
+  };
   const chooseAgainstBot = (choice:Choice) => {
     if ((mode !== 'bot' && mode !== 'tournament') || a !== null || b !== null) return;
     const reply = botChoice(botType, history);
@@ -220,15 +226,15 @@ function App() {
       <div className="ranking-scroll"><table className="ranking-table"><thead><tr><th>Đối thủ</th>{participants.map(p=><th key={p}>{participantName(p)}</th>)}</tr></thead><tbody>{participants.map(p=><tr key={p} className={p==='human'?'ranking-human':''}><th>{participantName(p)}</th>{participants.map(q=>{const match=tournamentMatches.find(m=>(m.first===p&&m.second===q)||(m.first===q&&m.second===p));return <td key={q}>{p===q?'—':match?fmt(match.first===p?match.firstProfit:match.secondProfit):'—'}</td>})}</tr>)}</tbody></table></div>
       <h2 className="history-title">Kết quả 10 trận</h2><div className="history-list">{tournamentMatches.map((m,i)=><div className="history-row" key={i}><span>Trận {i+1}</span><span>{participantName(m.first)} vs {participantName(m.second)}</span><strong>{fmt(m.firstProfit)} / {fmt(m.secondProfit)}</strong></div>)}</div>
       <p className="disclaimer">Bot đấu tự động theo quy tắc riêng; không được xem lựa chọn hiện tại của đối thủ. Đây là kết quả một tournament, chưa có kiểm định độ ổn định theo seed. Dữ liệu chưa lưu trên server.</p>
-      <button className="primary" onClick={reset}>Chơi giải mới ↻</button>
+      <div className="actions"><button className="primary" onClick={rematch}>🏆 Đấu lại Tournament ↻</button><button className="secondary" onClick={reset}>Về trang đầu</button></div>
     </section>}
     {screen === 'final' && <section className="story-screen">
-      <div className="eyebrow">FINAL RESULTS · WHAT DID YOU EARN?</div>{mode === "bot" && <p className="bot-banner">🤖 Trận đấu Người vs Bot · Luna: <strong>{botNames[botType]}</strong></p>}<h1>Every decision shapes the market.</h1><Garden moodA={totalA===totalB?'thinking':totalA>totalB?'smug':'furious'} moodB={totalA===totalB?'thinking':totalB>totalA?'smug':'furious'} />
+      <div className="eyebrow">FINAL RESULTS · WHAT DID YOU EARN?</div>{mode === "bot" && <p className="bot-banner">🤖 Trận đấu Người vs Bot · Luna: <strong>{botNames[botType]}</strong></p>}<h1>{totalA === totalB ? '🤝 Hòa! Một trận đấu cân sức.' : totalA > totalB ? '🏆 Milo chiến thắng!' : '🌱 Milo chưa thắng lần này!'}</h1><p>{totalA === totalB ? 'Hai bên có cùng tổng lợi nhuận. Bạn có thể thử chiến lược khác.' : totalA > totalB ? 'Bạn đã vượt đối thủ về tổng lợi nhuận. Bạn có thể giữ vững thành tích không?' : 'Đối thủ đạt lợi nhuận cao hơn. Hãy thử một cách chơi khác trong trận tái đấu.'}</p><Garden moodA={totalA===totalB?'thinking':totalA>totalB?'smug':'furious'} moodB={totalA===totalB?'thinking':totalB>totalA?'smug':'furious'} />
       <div className="final-scores"><div><span>MILO</span><strong>{fmt(totalA)}</strong><small>cumulative profit</small></div><div><span>LUNA</span><strong>{fmt(totalB)}</strong><small>cumulative profit</small></div></div>
       <div className="dialogue"><span className="speaker">THE STORYTELLER</span><p>Over {MAX_ROUNDS} rounds at H={h}, neither firm subscribed in {cooperation} rounds. Milo subscribed in {visibleHistory.filter(t=>t.a==='D').length} rounds and Luna in {visibleHistory.filter(t=>t.b==='D').length}. These are descriptive outcomes, not evidence of an optimal strategy.</p></div>
       <h2 className="history-title">All 10 rounds</h2>
       <div className="history-list">{visibleHistory.map(t => <div className="history-row" key={t.round}><span>Round {t.round}</span><span>{label(t.a)} / {label(t.b)}</span><strong>{fmt(t.pa)} / {fmt(t.pb)}</strong></div>)}</div>
-      <button className="primary" onClick={reset}>Start another match ↻</button>
+      <div className="actions">{mode !== 'online' && <button className="primary" onClick={rematch}>⚔️ Đấu lại ngay ↻</button>}<button className="secondary" onClick={reset}>Chọn chế độ khác</button></div>
     </section>}
     <footer>AXELROD–COURNOT HUMAN DECISION EXPERIMENT · THE TRUST GARDEN</footer>
   </main>;
