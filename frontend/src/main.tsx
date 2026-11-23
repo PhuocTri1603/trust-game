@@ -35,7 +35,7 @@ function App() {
   const [submitted, setSubmitted] = useState(false);
   const [onlineHistory, setOnlineHistory] = useState<Turn[]>([]);
   const socket = useRef<WebSocket | null>(null);
-  const api = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\\/$/, '');
+  const api = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
   const connect = (data:{code:string;token:string;seat:'A'|'B'}) => {
     socket.current?.close();
     setMode('online');
