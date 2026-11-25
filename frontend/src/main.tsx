@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import Party from './Party';
+import PartyOnline from './PartyOnline';
 
 type Choice = 'C' | 'D';
 type BotType = 'random' | 'cooperate' | 'defect' | 'tit_for_tat';
@@ -101,6 +102,7 @@ function App() {
     setRecordedMatch(true);
   };
   const [party,setParty]=useState(false);
+  const [partyOnline,setPartyOnline]=useState(()=>!!new URLSearchParams(window.location.search).get('party')||!!sessionStorage.getItem('trust-garden-party-session'));
   const [screen, setScreen] = useState<Screen>('intro');
   const [mode, setMode] = useState<'local' | 'online' | 'bot' | 'tournament'>('local');
   const [invite, setInvite] = useState('');
@@ -249,11 +251,13 @@ function App() {
     else setRound(round + 1);
   };
 
+  if(partyOnline)return <main className="app-shell"><PartyOnline h={h} onExit={()=>setPartyOnline(false)}/></main>;
   if(party)return <main className="app-shell"><Party h={h} onExit={()=>setParty(false)}/></main>;
   return <main className={`app-shell theme-${activeTheme}`}>
     <header className="topbar"><span className="brand">⚙ THE TRUST GARDEN · AI COMPETITION</span><span className="edition">AN AXELROD–COURNOT EXPERIMENT</span></header>
     {screen === 'intro' && <section className="story-screen">
       <button className="primary" disabled={!!session||pending} onClick={()=>setParty(true)}>🎭 PARTY TABLE · Chơi thử 6 người</button>
+      <button className="primary" disabled={!!session||pending} onClick={()=>setPartyOnline(true)}>🌐 PARTY ONLINE · 6 người thật</button>
       <div className="choice-card" style={{maxWidth:650,margin:'0 auto 18px'}}>
         <h2>🌱 HỒ SƠ NGƯỜI CHƠI · CẤP {level}</h2>
         <label htmlFor="player-name">Tên hiển thị: </label>
@@ -294,7 +298,7 @@ function App() {
       <div className="eyebrow">CHAPTER THREE · INVITE A FRIEND</div><h1>Every market needs two firms.</h1><Garden />
       <div className="dialogue"><span className="speaker">CHOOSE HOW TO PLAY</span><p>Chọn đấu với người thật trên hai thiết bị, chơi thử trên một thiết bị, hoặc đấu với một trong bốn bot. H (1–6) được cố định trong 10 vòng.</p></div>
       <div className="dialogue"><span className="speaker">PAYOFF MATRIX · H={h}</span><table className="payoff-table"><thead><tr><th>Milo / Luna</th><th>Đồng lòng</th><th>Âm thầm</th></tr></thead><tbody>{([["C","C"],["C","D"],["D","C"],["D","D"]] as Choice[][]).filter((_,i)=>i===0||i===1||i===2||i===3).map(([x,y],i)=><tr key={i}><th>{label(x)} / {label(y)}</th><td colSpan={2}>{fmt(payoff(x,y,h)[0])} / {fmt(payoff(x,y,h)[1])}</td></tr>)}</tbody></table><p>Payoffs shown as Milo / Luna. H={h}, m=8, d=1, F=10. Payoffs are rounded to whole numbers each round. Negative payoffs are possible.</p></div><div className="choice-grid">
-        <div className="choice-card"><h2>🎭 PARTY TABLE</h2><p>Thử bàn tròn với 5 bot, luân chuyển đối thủ và emote.</p><button className="primary" disabled={!!session||pending} onClick={()=>setParty(true)}>Chơi thử Party</button></div>
+        <div className="choice-card"><h2>🎭 PARTY TABLE</h2><p>Thử bàn tròn với 5 bot, luân chuyển đối thủ và emote.</p><button className="primary" disabled={!!session||pending} onClick={()=>setParty(true)}>Chơi thử Party</button><button className="primary" disabled={!!session||pending} onClick={()=>setPartyOnline(true)}>Party Online</button></div>
         <div className="choice-card"><h2>ONLINE · TWO DEVICES</h2><label htmlFor="h-select">AI benefit horizon H: </label><select id="h-select" value={h} disabled={!!session} onChange={e=>setH(Number(e.target.value))}>{[1,2,3,4,5,6].map(v=><option key={v} value={v}>{v}</option>)}</select><button className="primary" disabled={!!session||pending} onClick={createRoom}>Create private room</button>
           <p>Or join your friend's room:</p><input aria-label="Room code" placeholder="ROOM CODE" maxLength={6} value={invite} onChange={e=>setInvite(e.target.value)} />
           <button className="secondary" disabled={!!session||pending} onClick={joinRoom}>Join room</button>
