@@ -205,12 +205,12 @@ function App() {
   }).sort((x,y)=>y.profit-x.profit || participants.indexOf(x.id)-participants.indexOf(y.id));
   const totalA = visibleHistory.reduce((sum, t) => sum + t.pa, 0) + (mode !== 'online' ? (scores?.[0] ?? 0) : 0);
   const totalB = visibleHistory.reduce((sum, t) => sum + t.pb, 0) + (mode !== 'online' ? (scores?.[1] ?? 0) : 0);
-  const latest = visibleHistory[visibleHistory.length - 1];
-  const lastPayoffs: [number,number] | null = mode !== 'online' && scores ? scores : latest ? [latest.pa, latest.pb] : null;
-  const moodFor = (seat:0|1):'thinking'|'smug'|'furious' => !lastPayoffs || lastPayoffs[0] === lastPayoffs[1] ? 'thinking' : lastPayoffs[seat] > lastPayoffs[1-seat] ? 'smug' : 'furious';
+
+
+
   const cooperation = visibleHistory.filter(t => t.a === 'C' && t.b === 'C').length;
   const resultStory = a === 'C' && b === 'C' ? 'Cả hai chọn Đồng lòng (không dùng AI).' : a === 'D' && b === 'D' ? 'Cả hai chọn Âm thầm (đăng ký AI và trả phí).' : 'Hai bên đưa ra lựa chọn khác nhau. Lợi nhuận được tính theo mô hình Cournot.';
-  const reset = () => { setVotedRematch(false); socket.current?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setTournamentMatches([]); setH(3); };
+  const reset = () => { setVotedRematch(false); const ws=socket.current;socket.current=null;ws?.close(); sessionStorage.removeItem('trust-garden-session'); setSession(null); setMode('local'); setOnlineHistory([]); setScreen('intro'); setTutorial(0); setRound(1); setA(null); setB(null); setHistory([]); setBotType('random'); setTournamentMatches([]); setH(3); };
   const rematch = () => {
     if (mode === 'online') return;
     setA(null); setB(null); setHistory([]); setRound(1); setRecordedMatch(false); setIsRematch(true);
@@ -305,7 +305,7 @@ function App() {
           <button className="secondary" disabled={!!session||pending} onClick={() => {setMode('local');setA(null);setB(null);setHistory([]);setRound(1);setRecordedMatch(false);setIsRematch(false);setScreen('game');}}>Try local demo (H={h})</button>
         </div>
       </div>
-      {session && <p>Share code <strong>{session.code}</strong> with your friend. The game begins automatically when both join.</p>}
+      {session && !session.publicQueue && <p>Share code <strong>{session.code}</strong> with your friend. The game begins automatically when both join.</p>}
     </section>}
     {screen === 'game' && <section className="story-screen">
       <div className="eyebrow">CHAPTER FOUR · AI COMPETITION</div>
