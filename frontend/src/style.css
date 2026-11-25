@@ -45,3 +45,17 @@
 .theme-night .sky-sun{color:#f7efc0}
 .theme-night .sky-sun::after{content:'✦  ✧  ✦';position:absolute;top:12px;right:80px;font-size:24px;color:#f7e9aa;white-space:nowrap}
 @media(max-width:640px){.theme-option{flex:1 1 100%;max-width:290px}}
+
+/* Two-seat digital tabletop */
+.tabletop{max-width:680px;margin:16px auto;padding:16px;border:8px solid #9b704b;border-radius:28px;background:#dce8c9;box-shadow:inset 0 0 0 3px #b6c99c;display:grid;gap:12px}
+.table-player{display:flex;align-items:center;justify-content:center;gap:16px;color:#294b37}
+.table-player .character{zoom:.45;flex-shrink:0}
+.table-player span{background:#fff4cf;border-radius:20px;padding:6px 12px;font-weight:bold}
+.table-market{border:2px dashed #77956a;border-radius:22px;background:#a8c492;padding:16px;color:#263e2c;font-weight:bold}
+.table-slots{display:flex;justify-content:center;gap:14px;margin-top:12px}
+.table-slot{width:110px;min-height:90px;border:2px dashed #557b59;border-radius:12px;display:flex;flex-direction:column;justify-content:center;gap:8px;background:#eaf1d9}
+.table-slot.occupied{border-style:solid;background:#fff8e6}
+.table-slot strong{font-size:16px}
+.choice-buttons button{min-height:90px;border-radius:14px;box-shadow:0 4px 0 #78916d}
+.theme-sunset .tabletop{background:#f3d5ae}.theme-night .tabletop{background:#7895a1}
+@media(max-width:480px){.tabletop{padding:8px;border-width:5px}.table-market{padding:10px}.table-player{gap:8px}.table-slot{width:90px}}
