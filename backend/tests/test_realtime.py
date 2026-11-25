@@ -58,3 +58,23 @@ def test_matchmaking_pairs_same_h_and_does_not_steal_private_room():
     assert second["code"] != first["code"]
     assert first["token"] != partner["token"]
     assert client.post("/matchmaking/join", json={"h":0}).status_code == 422
+
+
+def test_queue_cancel_and_private_join_isolation():
+    client = TestClient(app)
+    a = client.post("/matchmaking/join", json={"h":3}).json()
+    assert client.post("/rooms/join", json={"code":a["code"]}).status_code == 409
+    assert client.post("/matchmaking/cancel", json={"code":a["code"],"token":"wrong"}).status_code == 403
+    assert client.post("/matchmaking/cancel", json={"code":a["code"],"token":a["token"]}).status_code == 200
+    assert a["code"] not in rooms
+
+def test_stale_queue_and_matched_cancel():
+    client = TestClient(app)
+    a = client.post("/matchmaking/join", json={"h":3}).json()
+    rooms[a["code"]].created_at -= 301
+    b = client.post("/matchmaking/join", json={"h":3}).json()
+    assert a["code"] not in rooms
+    assert b["seat"] == "A"
+    c = client.post("/matchmaking/join", json={"h":3}).json()
+    assert c["code"] == b["code"]
+    assert client.post("/matchmaking/cancel", json={"code":b["code"],"token":b["token"]}).status_code == 409
