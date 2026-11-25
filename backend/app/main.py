@@ -194,3 +194,6 @@ async def game_socket(ws: WebSocket, code: str):
             if room.public_queue and len(room.tokens) == 1:
                 room.created_at = time.monotonic()
             await send_state(room)
+
+from .party_rooms import router as party_router
+app.include_router(party_router)
