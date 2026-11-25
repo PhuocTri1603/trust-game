@@ -20,3 +20,12 @@ No scope expansion until MVP acceptance criteria pass.
 - Sprint 5: Cosmetic-only garden themes unlocked at 0/100/300 XP; local browser persistence. No ads, payments, purchases or advantage in payoffs. Release requires frontend CI/deployment and manual visual check.
 
 Monetization gate: do not add paid cosmetics or rewarded ads until privacy-respecting, consent-aware retention and completion metrics have been implemented and evaluated. XP is browser-local and is not a secure entitlement or purchase ledger.
+
+
+## Party Mode — approved product direction
+- Party 1: six-seat round table, local five-bot prototype, ten rounds, three pairwise contests per round, every pair meets twice. Reuse existing Cournot payoff. CI and visual acceptance pending.
+- Party 2: six-human private rooms, server-authoritative simultaneous reveal, reconnect and round synchronization.
+- Party 3: nonbinding promises and quick negotiation.
+- Party 4: cosmetic targeted emotes with rate limits and mute controls.
+- Party 5: awards, rematch and six-device playtest.
+Party mode is separate from existing duel and tournament. Local prototype emotes do not affect payoff or other devices. No monetization until retention and safety gates pass.
