@@ -2,6 +2,7 @@
 import asyncio
 import secrets
 import string
+import time
 from dataclasses import dataclass, field
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +18,7 @@ class Room:
     code: str
     h: int = 3
     public_queue: bool = False
+    created_at: float = field(default_factory=time.monotonic)
     tokens: dict = field(default_factory=dict)
     clients: dict = field(default_factory=dict)
     choices: dict = field(default_factory=dict)
@@ -27,6 +29,12 @@ class Room:
 
 rooms: dict[str, Room] = {}
 matchmaking_lock = asyncio.Lock()
+QUEUE_TTL = 300
+
+def prune_queue():
+    for code, room in list(rooms.items()):
+        if room.public_queue and len(room.tokens) == 1 and not room.clients and time.monotonic() - room.created_at >= QUEUE_TTL:
+            rooms.pop(code, None)
 
 
 class CreateRequest(BaseModel):
@@ -34,6 +42,9 @@ class CreateRequest(BaseModel):
 
 class JoinRequest(BaseModel):
     code: str
+
+class CancelRequest(JoinRequest):
+    token: str
 
 def state(room: Room, seat: str) -> dict:
     scores = [sum(t["points"][i] for t in room.history) for i in (0, 1)]
@@ -76,8 +87,9 @@ async def matchmaking_join(request: CreateRequest = CreateRequest()):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     async with matchmaking_lock:
+        prune_queue()
         for room in rooms.values():
-            if room.public_queue and room.h == request.h and len(room.tokens) == 1 and not room.history:
+            if room.public_queue and room.h == request.h and len(room.tokens) == 1 and not room.history and (room.clients or time.monotonic() - room.created_at < 15):
                 token = secrets.token_urlsafe(32)
                 room.tokens["B"] = token
                 return {"code": room.code, "seat": "B", "token": token, "h": room.h}
@@ -88,11 +100,28 @@ async def matchmaking_join(request: CreateRequest = CreateRequest()):
         rooms[code] = Room(code=code, h=request.h, public_queue=True, tokens={"A": token})
         return {"code": code, "seat": "A", "token": token, "h": request.h}
 
+@app.post("/matchmaking/cancel")
+async def matchmaking_cancel(request: CancelRequest):
+    async with matchmaking_lock:
+        room = rooms.get(request.code.strip().upper())
+        if room is None:
+            return {"cancelled": True}
+        if not room.public_queue or not secrets.compare_digest(room.tokens.get("A", ""), request.token):
+            raise HTTPException(403, "Invalid queue token")
+        if len(room.tokens) != 1:
+            raise HTTPException(409, "Already matched")
+        rooms.pop(room.code)
+        for ws in list(room.clients.values()):
+            await ws.close(code=1000)
+        return {"cancelled": True}
+
 @app.post("/rooms/join")
-def join_room(request: JoinRequest):
+async def join_room(request: JoinRequest):
     room = rooms.get(request.code.strip().upper())
     if room is None:
         raise HTTPException(404, "Room not found")
+    if room.public_queue:
+        raise HTTPException(409, "Public matchmaking room")
     if "B" in room.tokens:
         raise HTTPException(409, "Room full")
     token = secrets.token_urlsafe(32)
@@ -108,6 +137,9 @@ async def game_socket(ws: WebSocket, code: str):
         await ws.close(code=1008)
         return
     await ws.accept()
+    if rooms.get(room.code) is not room:
+        await ws.close(code=1008)
+        return
     old = room.clients.get(seat)
     room.clients[seat] = ws
     if old:
@@ -116,6 +148,8 @@ async def game_socket(ws: WebSocket, code: str):
     try:
         while True:
             msg = await ws.receive_json()
+            if room.clients.get(seat) is not ws or rooms.get(room.code) is not room:
+                break
             if msg.get("type") == "match.rematch":
                 async with room.lock:
                     if len(room.history) != ROUNDS or len(room.tokens) != 2:
@@ -157,4 +191,6 @@ async def game_socket(ws: WebSocket, code: str):
     finally:
         if room.clients.get(seat) is ws:
             room.clients.pop(seat, None)
+            if room.public_queue and len(room.tokens) == 1:
+                room.created_at = time.monotonic()
             await send_state(room)
